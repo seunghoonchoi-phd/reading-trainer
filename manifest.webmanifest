@@ -1,0 +1,15 @@
+{
+  "name": "리드패스트 · 속독 훈련",
+  "short_name": "리드패스트",
+  "description": "근거 기반 외국어 읽기 속도·이해 훈련 (영어·중국어)",
+  "lang": "ko",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f1ea",
+  "theme_color": "#1f2933",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
