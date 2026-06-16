@@ -43,6 +43,9 @@ _build/                데이터 생성 스크립트(배포 제외)
 ## 실행 / 배포
 - 로컬: 정적 서버로 폴더를 서빙(`python -m http.server` 등) 후 접속. (ES 모듈·fetch 때문에 file:// 직접 열기는 제한)
 - 배포: GitHub Pages(`.nojekyll` 포함) 또는 Netlify에 폴더 그대로 업로드. HTTPS에서 PWA 설치 가능.
+- **갱신(공개 후)**: `powershell -File "_build\sync.ps1"` — 앱 리포(reading-trainer) 푸시 + 홈페이지 `static/reading-trainer` 미러 + 사이트 카드까지 한 번에 동기화. 사이트 리포에선 reading-trainer 경로만 커밋합니다.
+
+라이브: <https://seunghoonchoi.com/reading-trainer/> · 소스: <https://github.com/seunghoonchoi-phd/reading-trainer>
 
 ## 면책
 교육·자기훈련용. 학습 효과는 개인차가 있으며, 이 앱은 과장된 속독 효과를 약속하지 않습니다.
