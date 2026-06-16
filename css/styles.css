@@ -76,7 +76,9 @@ body {
   background: var(--bg-elev); border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 30;
 }
-.appbar__brand { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.appbar__brand { display: flex; align-items: baseline; gap: 8px; min-width: 0; cursor: pointer; border-radius: 8px; padding: 2px 4px; margin: -2px -4px; }
+.appbar__brand:hover .appbar__title { color: var(--accent-ink); }
+.appbar__brand:active { transform: translateY(1px); }
 .appbar__logo { color: var(--accent); font-size: 1.3rem; transform: translateY(2px); }
 .appbar__title { font-weight: 800; letter-spacing: -.01em; font-size: 1.12rem; }
 .appbar__sub { color: var(--ink-faint); font-size: .76rem; white-space: nowrap; }

@@ -34,6 +34,13 @@ $$('.seg__btn').forEach(b => b.addEventListener('click', () => {
 $$('.tab').forEach(t => t.addEventListener('click', () => { route = t.dataset.route; syncTabs(); render(); }));
 function syncTabs() { $$('.tab').forEach(t => t.classList.toggle('is-active', t.dataset.route === route)); }
 
+// brand → home
+const brandEl = $('.appbar__brand');
+if (brandEl) {
+  brandEl.addEventListener('click', () => go('home'));
+  brandEl.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go('home'); } });
+}
+
 function render() {
   clear(view); view.scrollTop = 0; window.scrollTo(0, 0);
   if (route === 'home') renderHome();
@@ -46,73 +53,20 @@ function render() {
 function go(r) { route = r; syncTabs(); render(); }
 
 /* ---------- HOME ---------- */
-function renderHome() {
-  const today = store.sessionsToday().length;
-  const streak = store.getState().streak;
-  const errFull = store.errSeries(lang, 'full');
-  const recentErr = errFull.slice(-12).map(r => r.err);
-  const lastErr = errFull.length ? errFull[errFull.length - 1].err : null;
-
-  const vocabDue = store.srDueList('vocab-' + lang, vocabKeys()).length;
-  const retrDue = store.srDueList('retr-' + lang, content.passagesFor(lang).map(p => p.id)).length;
-  const coverageMeasured = errFull.length > 0;
-
-  const hero = h('div', { class: 'card', style: { background: 'var(--accent-soft)', border: '1px solid var(--accent)' } },
-    h('p', { class: 'eyebrow' }, (lang === 'en' ? 'English' : '中文') + ' 읽기 훈련'),
-    h('div', { class: 'row spread' },
-      h('div', null,
-        h('div', { class: 'h1', style: { margin: 0 } }, lastErr != null ? `${lastErr} ` : '—',
-          h('span', { class: 'small muted', style: { fontWeight: '600' } }, lastErr != null ? (lang === 'zh' ? ' 자/분 ERR' : ' WPM ERR') : '')),
-        h('div', { class: 'small muted' }, lastErr != null ? '최근 유효 읽기속도 (속도×이해)' : '첫 ERR 정독으로 기준선을 만들어 보세요')),
-      h('div', { class: 'stat', style: { alignItems: 'flex-end' } },
-        h('span', { class: 'stat__num' }, '🔥 ' + streak.count), h('span', { class: 'stat__lbl' }, `연속 ${streak.count}일 · 오늘 ${today}세션`))),
-    recentErr.length > 1 ? h('div', { style: { marginTop: '10px' } }, sparkline(recentErr, 320, 50)) : null);
-
-  // adaptive recommendation
+function miniStat(num, lbl) {
+  return h('div', { class: 'stat' }, h('span', { class: 'stat__num', style: { fontSize: '1.25rem' } }, num), h('span', { class: 'stat__lbl' }, lbl));
+}
+function pickRecommendation() {
+  if (!store.errSeries(lang, 'full').length) return 'err';
+  if (store.srDueList('vocab-' + lang, vocabKeys()).length > 0) return 'vocab';
+  if (store.srDueList('retr-' + lang, content.passagesFor(lang).map(p => p.id)).length > 0) return 'retrieval';
   const intenseToday = store.sessionsToday().filter(s => ['conquer', 'err', 'repeated'].includes(s.drill)).length;
-  const recover = intenseToday >= 2;
-
-  const recs = [];
-  if (recover) recs.push(['retrieval', '회복 · 인출 복습', '과부하 충분 — 간격·인출로 공고화']);
-  if (!coverageMeasured) recs.push(['err', '기준선 측정', 'ERR 정독으로 현재 속도·이해도부터 재기']);
-  if (vocabDue > 0) recs.push(['vocab', `어휘 복습 (${vocabDue})`, '복습 시점 도래 — 잊기 전에']);
-  recs.push(['conquer', '정복 모드', '어려운 글: 1차독해 → 반복속독 → 전이']);
-  if (retrDue > 0) recs.push(['retrieval', `인출 복습 (${retrDue})`, '잊을 만할 때 다시 떠올리기']);
-  recs.push(['err', 'ERR 정독', '이해 유지한 채 속도 끌어올리기']);
-  if (lang === 'zh') recs.push(['zhchar', '글자 인지속도', '고빈도 한자 서브초 인식']);
-  const seen = new Set(); const recList = recs.filter(r => !seen.has(r[0]) && seen.add(r[0])).slice(0, 3);
-
-  const recCards = h('div', { class: 'tiles' }, ...recList.map(([id, name, sub]) => {
-    const d = DRILLS.find(x => x.id === id);
-    return h('button', { class: 'tile', onClick: () => launch(d) },
-      h('div', { class: 'tile__top' }, h('span', { class: 'tile__ico' }, d.icon), h('span', { class: 'tile__name' }, name)),
-      h('span', { class: 'tile__goal' }, sub));
-  }));
-
-  const programNote = h('div', { class: 'note small' },
-    '프로그램 순서: ', h('b', null, '① 어휘·커버리지'), ' → ', h('b', null, '② 속도(ERR)'), ' → ', h('b', null, '③ 전략(모드·논문·인출)'), '. 진짜 병목은 눈이 아니라 단어 인지 자동화입니다 — ',
-    h('a', { href: '#', onClick: (e) => { e.preventDefault(); go('theory'); }, style: { color: 'var(--accent-ink)', fontWeight: '700' } }, '원리 보기'));
-
-  mount(view, h('div', { class: 'fade-in' },
-    hero,
-    h('p', { class: 'track-label' }, '오늘의 추천'),
-    recCards,
-    h('div', { class: 'note small ' + (recover ? 'note--good' : ''), style: { marginTop: '12px' } },
-      recover
-        ? '🌙 회복 모드 — 오늘 과부하는 충분합니다. 쉬운 넓게읽기·인출 복습으로 공고화하세요. 간격과 수면이 강화를 만듭니다(수면은 새로 익힌 단어를 굳히지, 읽기 속도를 빠르게 하진 않습니다).'
-        : '🔥 과부하 모드 — 한 단계 위 난이도로 정복 모드를 미세요. 부하는 어휘·밀도·길이에 걸되, 눈 속도엔 걸지 않습니다(그건 훑기). 이해도는 끝까지 측정됩니다.'),
-    h('div', { style: { marginTop: '12px' } }, programNote),
-    content.data().isSeed ? h('div', { class: 'note note--warn', style: { marginTop: '14px' } }, '※ 콘텐츠 데이터(data/*.json)를 못 불러와 내장 샘플로 동작 중입니다.') : null));
+  if (intenseToday >= 2) return 'retrieval';
+  return 'conquer';
 }
-
-function vocabKeys() {
-  const d = content.data();
-  return lang === 'en' ? d.vocabEn.words.map(w => w.word) : d.vocabZh.items.map(w => w.hanzi);
-}
-
-/* ---------- TRAIN catalog ---------- */
-function renderTrain() {
-  const blocks = TRACKS.map(track => {
+// training menu grouped by track — the intuitive launchpad, shared by Home and 훈련
+function catalogBlocks() {
+  return TRACKS.map(track => {
     const ds = DRILLS.filter(d => d.track === track);
     if (!ds.length) return null;
     const tiles = ds.map(d => {
@@ -124,15 +78,53 @@ function renderTrain() {
     });
     return h('div', null, h('p', { class: 'track-label' }, track), h('div', { class: 'tiles' }, ...tiles));
   }).filter(Boolean);
+}
+function renderHome() {
+  const errFull = store.errSeries(lang, 'full');
+  const lastErr = errFull.length ? errFull[errFull.length - 1].err : null;
+  const streak = store.getState().streak;
+  const today = store.sessionsToday().length;
+
+  const status = (lastErr != null)
+    ? h('div', { class: 'row spread', style: { alignItems: 'center', marginBottom: '4px' } },
+        h('div', { class: 'row', style: { gap: '18px', flexWrap: 'wrap' } },
+          miniStat(lastErr + (lang === 'zh' ? ' 자/분' : ' WPM'), 'ERR'),
+          miniStat('🔥 ' + streak.count, '연속'),
+          miniStat(today + '회', '오늘')),
+        errFull.length > 1 ? sparkline(errFull.slice(-12).map(r => r.err), 150, 36) : null)
+    : null;
+
+  const rec = DRILLS.find(d => d.id === pickRecommendation());
+  const next = h('button', { class: 'tile', style: { borderColor: 'var(--accent)', background: 'var(--accent-soft)' }, onClick: () => launch(rec) },
+    h('div', { class: 'tile__top' }, h('span', { class: 'tile__ico' }, rec.icon), h('span', { class: 'tile__name' }, '이어서 · ' + rec.name)),
+    h('span', { class: 'tile__goal' }, rec.goal));
 
   mount(view, h('div', { class: 'fade-in' },
+    status,
+    h('p', { class: 'track-label', style: { marginTop: status ? '6px' : '2px' } }, '바로 시작'),
+    next,
+    ...catalogBlocks(),
+    h('p', { class: 'small muted center', style: { marginTop: '20px' } }, '왜 이렇게 훈련하나 ',
+      h('a', { href: '#', onClick: e => { e.preventDefault(); go('theory'); }, style: { fontWeight: '700', color: 'var(--accent-ink)' } }, '→ 원리')),
+    content.data().isSeed ? h('div', { class: 'note note--warn', style: { marginTop: '12px' } }, '※ 콘텐츠 데이터를 못 불러와 내장 샘플로 동작 중입니다.') : null));
+}
+
+function vocabKeys() {
+  const d = content.data();
+  return lang === 'en' ? d.vocabEn.words.map(w => w.word) : d.vocabZh.items.map(w => w.hanzi);
+}
+
+/* ---------- TRAIN catalog ---------- */
+function renderTrain() {
+  mount(view, h('div', { class: 'fade-in' },
     h('h1', { class: 'h1' }, '훈련'),
-    h('p', { class: 'lead' }, '커버리지 → 속도 → 전략 순으로 쌓으세요. 각 드릴 안에서 “왜 효과가 있나”를 확인할 수 있습니다.'),
-    ...blocks));
+    h('p', { class: 'lead' }, '커버리지 → 속도 → 전략 순으로 쌓으세요. 각 드릴에서 “왜 효과가 있나”를 볼 수 있습니다.'),
+    ...catalogBlocks()));
 }
 
 function launch(drill) {
-  const exit = () => { route = 'train'; syncTabs(); renderTrain(); };
+  const from = (route === 'home' || route === 'train') ? route : 'train';
+  const exit = () => { route = from; syncTabs(); render(); };
   clear(view); window.scrollTo(0, 0);
   drill.render(view, lang, exit);
 }
