@@ -1,8 +1,8 @@
 // ===== service worker — offline app shell =====
-const CACHE = 'readfast-v3';
+const CACHE = 'readfast-v6';
 const ASSETS = [
   './', './index.html', './css/styles.css',
-  './js/app.js', './js/util.js', './js/store.js', './js/content.js', './js/theory.js',
+  './js/app.js', './js/icons.js', './js/util.js', './js/store.js', './js/content.js', './js/theory.js',
   './js/drills/index.js', './js/drills/shared.js',
   './js/drills/vocab.js', './js/drills/conquer.js', './js/drills/err.js', './js/drills/repeated.js', './js/drills/modes.js',
   './js/drills/triage.js', './js/drills/retrieval.js', './js/drills/zhseg.js', './js/drills/zhchar.js', './js/drills/preview.js',

@@ -5,7 +5,7 @@ const KEY = 'readfast.v2';
 const DAY = 86400000;
 
 const DEFAULT = {
-  settings: { lang: 'en', theme: 'light' },
+  settings: { lang: 'en', theme: 'auto' },
   // per-language reading profile
   prof: {
     en: { err: [], pace: {}, ceiling: {}, coverage: null },
