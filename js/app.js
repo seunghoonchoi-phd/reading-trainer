@@ -188,15 +188,23 @@ function renderHome() {
       icon('chevron', { size: 18, cls: 'step__chev' }));
   });
 
+  const menuCard = (cls, ico, name, sub, route) => h('button', { class: 'menucard' + cls, onClick: () => go(route) },
+    h('span', { class: 'iconchip' }, icon(ico)),
+    h('span', { class: 'menucard__body' },
+      h('span', { class: 'menucard__name' }, name),
+      h('span', { class: 'menucard__sub' }, sub)),
+    icon('chevron', { size: 18, cls: 'menucard__chev' }));
+  const menu = h('div', { class: 'menu-grid' },
+    menuCard('', 'train', '전체 훈련 보기', '트랙별 드릴 전부', 'train'),
+    menuCard(' menucard--accent', 'theory', '원리', '왜 이렇게 훈련하나', 'theory'));
+
   mount(view, h('div', { class: 'fade-in' },
+    menu,
     status,
     h('p', { class: 'track-label', style: { marginTop: '16px' } }, hasBaseline ? '오늘의 훈련' : '먼저 · 기준선'),
     heroNode,
     !hasBaseline ? h('p', { class: 'track-label' }, '측정 후 · 오늘의 코스') : null,
     h('div', { class: 'session' + (hasBaseline ? '' : ' session--preview'), style: { marginTop: '12px' } }, ...steps),
-    h('div', { class: 'linkrow' },
-      h('a', { href: '#train', onClick: e => { e.preventDefault(); go('train'); } }, icon('train', { size: 16 }), '전체 훈련 보기'),
-      h('a', { href: '#theory', onClick: e => { e.preventDefault(); go('theory'); } }, icon('theory', { size: 16 }), '왜 이렇게 훈련하나')),
     content.data().isSeed ? h('div', { class: 'note note--warn', style: { marginTop: '12px' } }, '※ 콘텐츠 데이터를 못 불러와 내장 샘플로 동작 중입니다.') : null));
 }
 

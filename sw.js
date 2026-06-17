@@ -1,5 +1,5 @@
 // ===== service worker — offline app shell =====
-const CACHE = 'readfast-v6';
+const CACHE = 'readfast-v7';
 const ASSETS = [
   './', './index.html', './css/styles.css',
   './js/app.js', './js/icons.js', './js/util.js', './js/store.js', './js/content.js', './js/theory.js',
@@ -16,13 +16,15 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
+// network-first: always try fresh (so deploys never serve a stale/mismatched module mix);
+// fall back to cache only when offline. Keeps the app installable + offline-capable.
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
   e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+    fetch(e.request).then(res => {
       const copy = res.clone();
       caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
       return res;
-    }).catch(() => caches.match('./index.html')))
+    }).catch(() => caches.match(e.request).then(hit => hit || caches.match('./index.html')))
   );
 });
