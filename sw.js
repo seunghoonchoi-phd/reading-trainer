@@ -1,5 +1,5 @@
 // ===== service worker — offline app shell =====
-const CACHE = 'readfast-v7';
+const CACHE = 'readfast-v8';
 const ASSETS = [
   './', './index.html', './css/styles.css',
   './js/app.js', './js/icons.js', './js/util.js', './js/store.js', './js/content.js', './js/theory.js',

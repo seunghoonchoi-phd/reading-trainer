@@ -188,18 +188,7 @@ function renderHome() {
       icon('chevron', { size: 18, cls: 'step__chev' }));
   });
 
-  const menuCard = (cls, ico, name, sub, route) => h('button', { class: 'menucard' + cls, onClick: () => go(route) },
-    h('span', { class: 'iconchip' }, icon(ico)),
-    h('span', { class: 'menucard__body' },
-      h('span', { class: 'menucard__name' }, name),
-      h('span', { class: 'menucard__sub' }, sub)),
-    icon('chevron', { size: 18, cls: 'menucard__chev' }));
-  const menu = h('div', { class: 'menu-grid' },
-    menuCard('', 'train', '전체 훈련 보기', '트랙별 드릴 전부', 'train'),
-    menuCard(' menucard--accent', 'theory', '원리', '왜 이렇게 훈련하나', 'theory'));
-
   mount(view, h('div', { class: 'fade-in' },
-    menu,
     status,
     h('p', { class: 'track-label', style: { marginTop: '16px' } }, hasBaseline ? '오늘의 훈련' : '먼저 · 기준선'),
     heroNode,
