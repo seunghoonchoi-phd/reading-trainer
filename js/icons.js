@@ -21,7 +21,7 @@ export const ICONS = {
   train:     SVG('<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>'), // catalog grid
   mytexts:   SVG('<path d="M15.5 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6.5Z"/><path d="M15.5 3v3.5H19"/><path d="M8.5 13h7M8.5 16.5h4.5"/>'), // file-text
   progress:  SVG('<path d="M4 4v15.5a.5.5 0 0 0 .5.5H20"/><path d="m7 14.5 3.2-3.8 3 2.2 5-6.4"/>'), // trend up
-  theory:    SVG('<path d="M9.5 3h5l-.4 4.6a4 4 0 0 1 2.4 3.65V19a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-7.75a4 4 0 0 1 2.4-3.65L9.5 3Z"/><path d="M8.6 14h6.8"/>'), // flask — evidence/principles
+  theory:    SVG('<path d="M12 6c-1.7-1.1-3.8-1.8-6-1.8-1 0-2 .15-3 .4v13.2c1-.25 2-.4 3-.4 2.2 0 4.3.7 6 1.8 1.7-1.1 3.8-1.8 6-1.8 1 0 2 .15 3 .4V4.6c-1-.25-2-.4-3-.4-2.2 0-4.3.7-6 1.8Z"/><path d="M12 6v13.2"/><path d="m8 11 1.6 1.6L13 9.2" stroke-width="2"/>'), // open book + check — evidence/principles (flask read as a lock at small sizes)
 
   /* ---- ui glyphs ---- */
   flame:     SVG('<path d="M12.5 2.5c.4 2.2-1 3.6-1.9 4.6C9.4 8.5 8.5 9.7 8.5 11.5a3.5 3.5 0 0 0 7 0c0-1-.3-1.9-.8-2.7.9.5 1.6 1.4 1.6 2.9a4.9 4.9 0 0 1-9.8 0c0-3 2-4.6 3.3-6 1-1 1.7-2 1-3.2 .6.2 1.2.6 1.7 1.2Z"/>', 1.3),
@@ -34,6 +34,11 @@ export const ICONS = {
   back:      SVG('<path d="M15 5l-7 7 7 7"/>', 2),
   globe:     SVG('<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.3 2.3 3.5 5.3 3.5 8.5S14.3 18.2 12 20.5C9.7 18.2 8.5 15.2 8.5 12S9.7 5.8 12 3.5Z"/>'),
   dot:       SVG('<circle cx="12" cy="12" r="3.4" fill="currentColor" stroke="none"/>'),
+  cards:     SVG('<rect x="6.5" y="3.5" width="14" height="11" rx="1.5"/><path d="M4 8.5v9A2.5 2.5 0 0 0 6.5 20H17"/><path d="M10.5 7.5h6M10.5 10.5h3.5"/>'), // stacked flashcards
+  gear:      SVG('<circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.85 1.85M16.65 16.65l1.85 1.85M18.5 5.5l-1.85 1.85M7.35 16.65 5.5 18.5"/>'),
+  install:   SVG('<path d="M12 3.5v11M8 10.5l4 4 4-4"/><path d="M4.5 16.5v2.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2.5"/>'),
+  brand:     SVG('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3"/>', 2), // reticle — 초점(정독)의 시각화, icon.svg와 동일 모티프
+  level:     SVG('<path d="M4 20v-5M9.3 20v-9M14.6 20V7M20 20V3.8"/>', 2.2), // ascending bars — 레벨
 };
 
 // drill id -> icon name (ids already match ICONS keys, but keep an explicit map for safety)

@@ -1,11 +1,12 @@
-// ===== store.js — persistent state, SR scheduler, adaptive staircase =====
+// ===== store.js — persistent state, SR scheduler, adaptive staircase, level profile =====
 import { now, todayKey, clamp } from './util.js';
+import { LEVELS, levelOf } from './levels.js';
 
 const KEY = 'readfast.v2';
 const DAY = 86400000;
 
 const DEFAULT = {
-  settings: { lang: 'en', theme: 'auto' },
+  settings: { lang: 'en', theme: 'auto', level: { en: null, zh: null } },
   // per-language reading profile
   prof: {
     en: { err: [], pace: {}, ceiling: {}, coverage: null },
@@ -13,6 +14,7 @@ const DEFAULT = {
   },
   sr: {},            // deckId -> { itemKey -> {ease,interval,due,reps,lapses} }
   rt: { en: {}, zh: {} }, // word-recognition latency samples per freq band
+  hard: { en: {}, zh: {} }, // itemKey -> miss/slow count (재출제 가중치)
   sessions: [],      // {ts, drill, lang, ...}
   streak: { count: 0, last: null, freezes: 2 },
   seen: {},          // passageId -> count (avoid repeats / mark used)
@@ -20,6 +22,7 @@ const DEFAULT = {
 };
 
 let state = load();
+migrate();
 
 function load() {
   try {
@@ -38,13 +41,40 @@ function deepDefaults(s, d) {
   }
   return s === undefined ? d : s;
 }
+// 레벨 개념 도입 전 사용자 이관: 훈련 이력이 있으면(=최고난도 기본값 시절 사용자) 과부하 레벨로 유지
+function migrate() {
+  let dirty = false;
+  for (const lang of ['en', 'zh']) {
+    if (!state.settings.level[lang] && state.prof[lang].err.length > 0) {
+      state.settings.level[lang] = 'overload'; dirty = true;
+    }
+  }
+  if (dirty) save();
+}
 export function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {} }
 export function getState() { return state; }
-export function resetAll() { state = structuredClone(DEFAULT); save(); }
+
+// 진행 기록만 초기화 — 내 글·설정(레벨/테마 포함)은 보존
+export function resetProgress() {
+  const keep = { settings: state.settings, myTexts: state.myTexts };
+  state = structuredClone(DEFAULT);
+  state.settings = keep.settings;
+  state.myTexts = keep.myTexts;
+  save();
+}
+// 전체 초기화 — 내 글 포함 전부 삭제 (설정 화면에서 별도 확인)
+export function resetEverything() { state = structuredClone(DEFAULT); save(); }
 
 /* ---- settings ---- */
 export function getSetting(k) { return state.settings[k]; }
 export function setSetting(k, v) { state.settings[k] = v; save(); }
+
+/* ---- level profile ---- */
+export function getLevel(lang) { return state.settings.level[lang] || null; }
+export function setLevel(lang, lv) {
+  if (lv !== null && !LEVELS[lv]) return;
+  state.settings.level[lang] = lv; save();
+}
 
 /* ---- ERR history ---- */
 // rec: {ts, tier, units, wpm, comp, err, mode}
@@ -62,15 +92,24 @@ export function errSeries(lang, mode) {
 export function ceiling(lang, tier) { return state.prof[lang].ceiling[tier] || null; }
 
 /* ---- adaptive pace staircase (comprehension-gated, smoothed) ---- */
-// baseline starting pace by language (WPM / CPM). Conservative, below "normal".
-const BASE = { en: 200, zh: 230 };
+// 시작 페이스는 레벨 프로필에서 파생 — 초급자가 200 WPM에서 연속 실패로 시작하지 않게.
+function basePace(lang) {
+  const lv = levelOf(getLevel(lang) || 'builder');
+  return lv.base[lang];
+}
 export function getPace(lang, tier) {
   const p = state.prof[lang].pace[tier];
-  return p ? p.pace : BASE[lang];
+  return p ? p.pace : basePace(lang);
+}
+// 기준선 측정 결과로 해당 티어 페이스를 시딩 (이해 유지된 실측 속도의 90%에서 출발)
+export function seedPace(lang, tier, wpm) {
+  const slot = state.prof[lang].pace[tier] || (state.prof[lang].pace[tier] = { pace: basePace(lang), run: [] });
+  slot.pace = clamp(Math.round(wpm * 0.9), 80, lang === 'zh' ? 600 : 500);
+  save();
 }
 // comp in 0..1; returns {pace, dir}
 export function updatePace(lang, tier, comp) {
-  const slot = state.prof[lang].pace[tier] || (state.prof[lang].pace[tier] = { pace: BASE[lang], run: [] });
+  const slot = state.prof[lang].pace[tier] || (state.prof[lang].pace[tier] = { pace: basePace(lang), run: [] });
   slot.run.push(comp); if (slot.run.length > 3) slot.run.shift();
   const avg = slot.run.reduce((s, x) => s + x, 0) / slot.run.length;
   let dir = 'hold';
@@ -97,6 +136,8 @@ export function srDueList(deck, keys) {
   const t = now();
   return keys.filter(k => { const c = srCard(deck, k); return c.reps > 0 && c.due <= t; });
 }
+// 덱에 이미 기록된 키 전부(예: 정복 모드에서 표시한 미지 단어 큐)
+export function srKeys(deck) { return Object.keys(state.sr[deck] || {}); }
 export function srNewCount(deck, keys) {
   const d = state.sr[deck] || {};
   return keys.filter(k => !d[k] || d[k].reps === 0).length;
@@ -126,6 +167,22 @@ export function addRT(lang, band, ms, correct) {
   save();
 }
 export function rtBands(lang) { return state.rt[lang]; }
+
+/* ---- 오답·느린 항목 가중치 (틀리거나 느린 글자가 다음에 더 자주 나오게) ---- */
+export function bumpHard(lang, key) {
+  state.hard[lang][key] = (state.hard[lang][key] || 0) + 1;
+  save();
+}
+export function easeHard(lang, key) {
+  if (state.hard[lang][key]) {
+    state.hard[lang][key]--;
+    if (state.hard[lang][key] <= 0) delete state.hard[lang][key];
+    save();
+  }
+}
+export function hardKeys(lang) {
+  return Object.entries(state.hard[lang]).sort((a, b) => b[1] - a[1]).map(([k]) => k);
+}
 
 /* ---- sessions / streak ---- */
 export function logSession(rec) {
@@ -158,3 +215,12 @@ export function seenCount(id) { return state.seen[id] || 0; }
 export function addMyText(t) { state.myTexts.unshift({ id: 't' + now(), ts: now(), ...t }); save(); }
 export function myTexts() { return state.myTexts; }
 export function removeMyText(id) { state.myTexts = state.myTexts.filter(t => t.id !== id); save(); }
+
+/* ---- data export / import (설정 화면) ---- */
+export function exportJSON() { return JSON.stringify(state, null, 1); }
+export function importJSON(text) {
+  const s = JSON.parse(text); // throws on invalid
+  if (!s || typeof s !== 'object' || !s.prof) throw new Error('형식이 다릅니다');
+  state = deepDefaults(s, DEFAULT);
+  save();
+}

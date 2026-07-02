@@ -2,6 +2,7 @@
 import { h, mount, shuffle } from '../util.js';
 import * as content from '../content.js';
 import * as store from '../store.js';
+import { levelOf } from '../levels.js';
 import { drillHeader, resultCard } from './shared.js';
 
 export default {
@@ -12,7 +13,11 @@ export default {
   evidence: '머릿속 분할(Li & Pollatsek 2020); 분할 정확도가 L2 이해 예측(Shen & Jiang 2013); 띄어쓰기는 L2에 약간 도움, 비계로만 사용(Frontiers 2023).',
 
   render(root, lang, exit) {
-    const all = content.data().segZh.sentences || [];
+    const every = content.data().segZh.sentences || [];
+    // 레벨 티어 창 이하 난이도 문장만 (tier 필드 없거나 풀이 빈약하면 전체)
+    const maxTier = Math.max(...levelOf(store.getLevel('zh') || 'builder').tiers);
+    const filtered = every.filter(s => (s.tier || 1) <= maxTier);
+    const all = filtered.length >= 8 ? filtered : every;
     let hint = false;
     let pool = shuffle(all).slice(0, 8);
     let i = 0; const scores = [];

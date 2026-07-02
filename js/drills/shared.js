@@ -1,12 +1,29 @@
 // ===== drills/shared.js — common drill UI =====
 import { h, mount, clear, letterFor, shuffle } from '../util.js';
+import * as content from '../content.js';
+
+/* ---- 활성 드릴 정리 훅: 라우트·언어 전환 시 잔존 타이머가 화면을 덮지 않게 ---- */
+let teardown = null;
+export function setTeardown(fn) { teardown = fn; }
+export function runTeardown() { if (teardown) { try { teardown(); } catch {} teardown = null; } }
 
 export function drillHeader(name, onExit, why) {
-  return h('div', { class: 'hud' },
-    h('div', { class: 'row', style: { gap: '10px' } },
-      h('button', { class: 'iconbtn', onClick: onExit, title: '훈련 목록으로', 'aria-label': '뒤로' }, '‹'),
-      h('div', null, h('div', { style: { fontWeight: '800' } }, name))),
-    why ? h('span', { class: 'chip', title: why }, '근거 ✦') : null);
+  const whyNote = why ? h('div', { class: 'note small', style: { display: 'none', marginBottom: '12px' } }, why) : null;
+  const chip = why ? h('button', {
+    class: 'chip chip--btn', type: 'button', 'aria-expanded': 'false',
+    onClick: () => {
+      const open = whyNote.style.display !== 'none';
+      whyNote.style.display = open ? 'none' : '';
+      chip.setAttribute('aria-expanded', open ? 'false' : 'true');
+    },
+  }, '왜 효과 있나 ✦') : null;
+  return h('div', null,
+    h('div', { class: 'hud' },
+      h('div', { class: 'row', style: { gap: '10px' } },
+        h('button', { class: 'iconbtn', onClick: onExit, title: '훈련 목록으로', 'aria-label': '뒤로' }, '‹'),
+        h('div', null, h('div', { style: { fontWeight: '800' } }, name))),
+      chip),
+    whyNote);
 }
 
 export function whyBox(text) {
@@ -74,12 +91,17 @@ export function resultCard(rows, onAgain, onExit, extra) {
       h('button', { class: 'btn btn--ghost', onClick: onExit }, '훈련 목록')));
 }
 
-export function tierPicker(tiers, current, onPick, lang) {
+// 난이도 선택: 전체 티어를 항상 보여주되, 현재 레벨의 권장 창을 표시
+export function tierPicker(lang, current, onPick) {
+  const all = content.allTiers(lang);
+  const win = content.tiersFor(lang);
   return h('div', { class: 'row', style: { gap: '8px', flexWrap: 'wrap' } },
     h('span', { class: 'small muted' }, '난이도'),
-    ...tiers.map(t => h('button', {
-      class: 'seg__btn' + (t === current ? ' is-active' : ''),
-      style: { border: '1px solid var(--line)' }, onClick: () => onPick(t),
+    ...all.map(t => h('button', {
+      class: 'seg__btn' + (t === current ? ' is-active' : '') + (win.includes(t) ? '' : ' seg__btn--dim'),
+      style: { border: '1px solid var(--line)' },
+      title: win.includes(t) ? '' : '내 레벨 권장 범위 밖 (선택 가능)',
+      onClick: () => onPick(t),
     }, tierLabel(t, lang))));
 }
 export function tierLabel(t, lang) {

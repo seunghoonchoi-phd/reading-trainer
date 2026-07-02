@@ -1,5 +1,7 @@
 // ===== content.js — corpus loading, selection, tokenization, auto-cloze =====
 import { countUnits, shuffle, sample } from './util.js';
+import * as store from './store.js';
+import { levelOf } from './levels.js';
 
 // ---- seed fallback so the app runs before data/*.json is generated ----
 const SEED = {
@@ -91,20 +93,29 @@ export const data = () => DATA;
 export function passagesFor(lang, tier) {
   return DATA.passages.filter(p => p.lang === lang && (tier == null || p.tier === tier));
 }
-// difficulty floor — this reader does not want material at/below HSK6 (zh tier 4) or its EN equivalent
-export const TIER_FLOOR = { en: 5, zh: 5 };
-let HIDE_EASY = true;
-export function setHideEasy(v) { HIDE_EASY = !!v; }
-export function getHideEasy() { return HIDE_EASY; }
 
-function allTiers(lang) {
+export function allTiers(lang) {
   return [...new Set(DATA.passages.filter(p => p.lang === lang).map(p => p.tier))].sort((a, b) => a - b);
 }
+// 레벨 프로필의 티어 창 (구 TIER_FLOOR/HIDE_EASY 전역 상수를 대체 — 과부하 레벨이 옛 동작 [5,6]을 재현)
 export function tiersFor(lang) {
   const all = allTiers(lang);
-  if (!HIDE_EASY) return all;
-  const floored = all.filter(t => t >= (TIER_FLOOR[lang] || 0));
-  return floored.length ? floored : all.slice(-2);
+  const lv = levelOf(store.getLevel(lang) || 'builder');
+  const win = lv.tiers.filter(t => all.includes(t));
+  return win.length ? win : all;
+}
+// 전공 특화(materials) 지문은 과부하 레벨에서만 기본 노출 — 일반 학습자에겐 general 우선
+function domainFilter(pool, lang) {
+  if (store.getLevel(lang) === 'overload') return pool;
+  const general = pool.filter(p => (p.domain || 'general') !== 'materials');
+  return general.length ? general : pool;
+}
+// 덜 본 지문 우선 (markSeen 이력 연동 — 같은 지문 반복 노출을 늦춤)
+function freshest(pool) {
+  if (!pool.length) return null;
+  const min = Math.min(...pool.map(p => store.seenCount(p.id)));
+  const fresh = pool.filter(p => store.seenCount(p.id) === min);
+  return shuffle(fresh)[0];
 }
 export function pickPassage(lang, tier, exclude = []) {
   if (tier == null) {
@@ -112,12 +123,12 @@ export function pickPassage(lang, tier, exclude = []) {
     let pool = DATA.passages.filter(p => p.lang === lang && elig.includes(p.tier) && !exclude.includes(p.id));
     if (!pool.length) pool = DATA.passages.filter(p => p.lang === lang && elig.includes(p.tier));
     if (!pool.length) pool = passagesFor(lang);
-    return pool.length ? shuffle(pool)[0] : null;
+    return freshest(domainFilter(pool, lang));
   }
   let pool = passagesFor(lang, tier).filter(p => !exclude.includes(p.id));
   if (!pool.length) pool = passagesFor(lang, tier);
   if (!pool.length) pool = passagesFor(lang);
-  return pool.length ? shuffle(pool)[0] : null;
+  return freshest(domainFilter(pool, lang));
 }
 // content-word set for narrow-reading overlap (en: 4+ letter non-stopwords; zh: Han chars)
 function contentWords(text, lang) {

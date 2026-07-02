@@ -2,7 +2,9 @@
 import { h, mount, clear, shuffle, sample, median, startTimer } from '../util.js';
 import * as content from '../content.js';
 import * as store from '../store.js';
+import { levelOf, inBand } from '../levels.js';
 import { drillHeader, resultCard } from './shared.js';
+import { icon } from '../icons.js';
 
 function bank(lang) {
   const d = content.data();
@@ -10,12 +12,20 @@ function bank(lang) {
     ? { items: d.vocabEn.words.map(w => ({ key: w.word, band: w.band, front: w.word, ...w })), distract: d.vocabEn.pseudowords }
     : { items: d.vocabZh.items.map(w => ({ key: w.hanzi, band: w.freq_band || w.hsk || 3, front: w.hanzi, ...w })), distract: d.vocabZh.pseudochars };
 }
+// 레벨 어휘 밴드 창 안의 항목 우선. EN 밴드1(정관사류 기능어)은 새 카드에서 제외 —
+// 한국어 화자는 이미 알고, 카드 시간만 낭비하기 때문.
+function levelItems(lang, items) {
+  const lv = store.getLevel(lang) || 'builder';
+  const eligible = items.filter(i => !(lang === 'en' && i.band <= 1));
+  const inWin = eligible.filter(i => inBand(lv, i.band));
+  return { inWin, rest: eligible.filter(i => !inBand(lv, i.band)) };
+}
 
 export default {
   id: 'vocab', name: '어휘·인지속도', icon: '⚡', track: '커버리지',
   goal: '읽기의 진짜 병목인 단어 인지를 자동화합니다 (빈도순 간격반복 + 인지속도).',
   langs: ['en', 'zh'],
-  why: '읽기 속도의 병목은 눈이 아니라 어휘 접근입니다. 빈도가 높은 단어부터 간격반복(SM-2)으로 외우고, 어휘판단 과제로 재인 속도(반응시간)와 안정성을 높입니다. 빠르고 들쭉날쭉하지 않게 만드는 게 목표 — 이것이 “한눈에 들어오는” 느낌의 토대입니다.',
+  why: '읽기 속도의 병목은 눈이 아니라 어휘 접근입니다. 내 수준에 맞는 빈도대 단어부터 간격반복(잊을 만할 때 다시 보기)으로 외우고, 어휘판단 과제로 재인 속도(반응시간)와 안정성을 높입니다. 빠르고 들쭉날쭉하지 않게 만드는 게 목표 — 이것이 “한눈에 들어오는” 느낌의 토대입니다.',
   evidence: '간격·인출 효과 HIGH 유틸리티(Dunlosky 2013; Cepeda 2006/08). 어휘 접근이 병목(Rayner 2016; Grabe). RT 변동성은 참고 지표일 뿐 검증된 점수 아님.',
 
   render(root, lang, exit) {
@@ -26,23 +36,34 @@ export default {
         h('p', { class: 'muted' }, '두 가지 훈련을 번갈아 하세요. 카드는 “아는 것”을, 어휘판단은 “빠르게 아는 것”을 만듭니다.'),
         h('div', { class: 'tiles' },
           h('button', { class: 'tile', onClick: srMode },
-            h('div', { class: 'tile__top' }, h('span', { class: 'tile__ico' }, '🗂'), h('span', { class: 'tile__name' }, '어휘 카드 (간격반복)')),
-            h('span', { class: 'tile__goal' }, '빈도순으로 새 단어를 익히고 복습 일정에 맞춰 다시 떠올립니다.')),
+            h('div', { class: 'tile__top' }, h('span', { class: 'iconchip' }, icon('cards')), h('span', { class: 'tile__name' }, '어휘 카드 (간격반복)')),
+            h('span', { class: 'tile__goal' }, '내 수준 빈도대부터 새 단어를 익히고, 잊을 만할 때 다시 떠올립니다. 정복 모드에서 표시한 단어도 여기로 옵니다.')),
           h('button', { class: 'tile', onClick: ldMode },
-            h('div', { class: 'tile__top' }, h('span', { class: 'tile__ico' }, '⏱'), h('span', { class: 'tile__name' }, '어휘판단 (속도)')),
+            h('div', { class: 'tile__top' }, h('span', { class: 'iconchip' }, icon('vocab')), h('span', { class: 'tile__name' }, '어휘판단 (속도)')),
             h('span', { class: 'tile__goal' }, '단어/비단어를 빠르게 가려 인지 반응시간을 측정·단축합니다.')))));
 
     // ---------- SR flashcards ----------
     const srMode = () => {
       const b = bank(lang);
       const deck = 'vocab-' + lang;
+      const conqDeck = 'conquer-vocab-' + lang;
       const keys = b.items.map(i => i.key);
+      const byKey = new Map(b.items.map(i => [i.key, i]));
       const due = store.srDueList(deck, keys);
-      // build session: due cards + up to 8 new, prioritized by frequency band (low band = frequent = first)
+      // 정복 모드에서 표시한 미지 단어 큐 합류 (약속 이행: “복습 큐에 담았습니다”)
+      const conqKeys = store.srKeys(conqDeck);
+      const conqDue = store.srDueList(conqDeck, conqKeys)
+        .concat(conqKeys.filter(k => store.srCard(conqDeck, k).reps === 0)); // 새로 표시된 단어 포함
+      const { inWin, rest } = levelItems(lang, b.items);
+      const pickNew = arr => arr.filter(i => store.srCard(deck, i.key).reps === 0 && !due.includes(i.key))
+        .sort((x, y) => x.band - y.band);
+      // build session: due cards + conquer-marked + up to 8 new (level band window first)
       const dueItems = b.items.filter(i => due.includes(i.key));
-      const newItems = b.items.filter(i => store.srCard(deck, i.key).reps === 0 && !due.includes(i.key))
-        .sort((x, y) => x.band - y.band).slice(0, 8);
-      let queue = shuffle(dueItems).concat(newItems);
+      const conqItems = [...new Set(conqDue)].filter(k => !due.includes(k))
+        .map(k => byKey.get(k) || { key: k, front: k, band: 0, gloss_ko: '', fromConquer: true })
+        .map(i => ({ ...i, fromConquer: true })).slice(0, 6);
+      const newItems = pickNew(inWin).concat(pickNew(rest)).slice(0, 8);
+      let queue = shuffle(dueItems).concat(conqItems, newItems);
       if (!queue.length) queue = sample(b.items, Math.min(10, b.items.length));
       let i = 0, graded = 0, known = 0;
 
@@ -55,8 +76,8 @@ export default {
           ? h('div', { class: 'flash__front flash__zh' }, it.front)
           : h('div', { class: 'flash__front' }, it.front);
         const back = h('div', { class: 'stack center', style: { display: 'none' } },
-          lang === 'zh' ? h('div', { class: 'flash__pinyin' }, it.pinyin) : h('div', { class: 'flash__pinyin', style: { fontSize: '.9rem' } }, it.pos || ''),
-          h('div', { class: 'flash__gloss' }, it.gloss_ko),
+          lang === 'zh' ? h('div', { class: 'flash__pinyin' }, it.pinyin || '') : h('div', { class: 'flash__pinyin', style: { fontSize: '.9rem' } }, it.pos || ''),
+          h('div', { class: 'flash__gloss' }, it.gloss_ko || (it.fromConquer ? '(정복 모드에서 표시한 단어 — 뜻을 직접 확인했었죠)' : '')),
           it.example ? h('div', { class: 'flash__ex' }, it.example) : null,
           (lang === 'zh' && it.transparent && it.semantic_radical) ? h('div', { class: 'note note--good small' }, `의미 힌트: 부수 ‘${it.semantic_radical}’ = ${it.radical_meaning_ko || ''}`) : null);
         const grades = h('div', { class: 'btnrow', style: { justifyContent: 'center', display: 'none' } },
@@ -67,11 +88,13 @@ export default {
         const revealBtn = h('button', { class: 'btn btn--primary btn--lg btn--block', onClick: reveal }, '뜻 보기');
         function reveal() {
           revealed = true; const rt = t.stop();
-          store.addRT(lang, it.band, rt, true);
+          if (it.band) store.addRT(lang, it.band, rt, true);
           back.style.display = ''; grades.style.display = 'flex'; revealBtn.style.display = 'none';
         }
         function grade(g) {
-          if (!revealed) return; store.srReview(deck, it.key, g); graded++; if (g >= 2) known++;
+          if (!revealed) return;
+          store.srReview(it.fromConquer ? conqDeck : deck, it.key, g);
+          graded++; if (g >= 2) known++;
           i++; card();
         }
         mount(root,
@@ -80,17 +103,21 @@ export default {
           h('div', { class: 'card flash fade-in' }, front, back),
           h('div', { style: { marginTop: '12px' } }, revealBtn, grades));
       };
-      const finish = () => mount(root, drillHeader('어휘 카드', exit, null),
-        resultCard([[graded + '', '복습한 카드'], [known + '', '알맞음 이상']], srMode, exit,
-          h('p', { class: 'small muted' }, '복습 일정(간격반복)에 따라 다음에 다시 등장합니다.')));
-      store.logSession({ drill: 'vocab-sr', lang });
+      const finish = () => {
+        store.logSession({ drill: 'vocab-sr', lang, graded });
+        mount(root, drillHeader('어휘 카드', exit, null),
+          resultCard([[graded + '', '복습한 카드'], [known + '', '알맞음 이상']], srMode, exit,
+            h('p', { class: 'small muted' }, '복습 일정(간격반복)에 따라 다음에 다시 등장합니다.')));
+      };
       card();
     };
 
     // ---------- speeded lexical decision ----------
     const ldMode = () => {
       const b = bank(lang);
-      const reals = shuffle(b.items).slice(0, 14).map(x => ({ stim: x.front, real: true, band: x.band }));
+      const { inWin, rest } = levelItems(lang, b.items);
+      const pool = shuffle(inWin).concat(shuffle(rest)).slice(0, 14);
+      const reals = pool.map(x => ({ stim: x.front, real: true, band: x.band }));
       const fakes = shuffle(b.distract).slice(0, 8).map(x => ({ stim: x, real: false, band: null }));
       const trials = shuffle(reals.concat(fakes));
       let i = 0; const results = [];

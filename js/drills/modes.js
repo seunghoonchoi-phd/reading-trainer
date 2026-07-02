@@ -2,7 +2,8 @@
 import { h, mount, startTimer, fmtClock, countUnits, norm } from '../util.js';
 import * as content from '../content.js';
 import * as store from '../store.js';
-import { drillHeader, compQuiz, askMCQ, resultCard, tierPicker, tierLabel } from './shared.js';
+import { defaultTier } from '../levels.js';
+import { drillHeader, compQuiz, askMCQ, resultCard, tierPicker, tierLabel, setTeardown } from './shared.js';
 
 export default {
   id: 'modes', name: '모드 선택 (훑기/찾기/정독)', icon: '🎯', track: '전략',
@@ -12,14 +13,13 @@ export default {
   evidence: '훑기는 알려진 이해 비용을 지닌 별개 기술(Rayner 2016; Duggan & Payne 2009; Just & Carpenter 1987).',
 
   render(root, lang, exit) {
-    const tiers = content.tiersFor(lang);
-    let tier = tiers.includes(2) ? 2 : tiers[Math.floor(tiers.length / 2)] || tiers[0];
+    let tier = defaultTier(store.getLevel(lang) || 'builder', content.allTiers(lang)) || 2;
 
     const menu = () => mount(root, drillHeader(this.name, exit, this.why),
       h('div', { class: 'card fade-in' },
         h('h2', { class: 'h2' }, '읽기 모드를 고르세요'),
         h('p', { class: 'muted' }, '같은 글이라도 목적이 다르면 읽는 방식이 달라야 합니다.'),
-        tierPicker(tiers, tier, t => { tier = t; menu(); }, lang),
+        tierPicker(lang, tier, t => { tier = t; menu(); }),
         h('div', { class: 'tiles', style: { marginTop: '12px' } },
           modeTile('💨', 'Gist · 요지', '시간 제한 안에 훑고 핵심 1문제. 세부 기억은 떨어집니다.', () => gist()),
           modeTile('🔎', 'Scan · 정보 찾기', '특정 사실 하나를 시간 압박 속에 찾아냅니다.', () => scan()),
@@ -41,6 +41,7 @@ export default {
       let left = cap;
       const timerEl = h('span', { class: 'hud__timer' }, left + 's');
       const iv = setInterval(() => { left--; timerEl.textContent = left + 's'; if (left <= 0) { clearInterval(iv); toQ(); } }, 1000);
+      setTeardown(() => clearInterval(iv)); // 화면 이탈 시 카운트다운이 다른 화면을 덮지 않게
       const toQ = () => {
         clearInterval(iv);
         const host = h('div');
@@ -56,7 +57,7 @@ export default {
       mount(root, drillHeader('Gist · 요지 훑기', () => { clearInterval(iv); exit(); }, this.why),
         h('div', { class: 'hud' }, h('span', { class: 'chip' }, `훑기 모드 · 세부 기억 ↓`), timerEl),
         h('div', { class: 'note note--warn' }, '핵심만 잡으세요. 시간이 끝나면 요지 1문제가 나옵니다.'),
-        h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'reader', 'data-lang': lang }, h('div', { class: 'reader-wrap' }, p.text))),
+        h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang }, h('div', { class: 'reader-wrap' }, p.text))),
         h('div', { class: 'btnrow', style: { marginTop: '12px' } }, h('button', { class: 'btn btn--primary' , onClick: toQ }, '다 훑음 → 핵심 문제')));
     };
 
@@ -80,7 +81,7 @@ export default {
         h('div', { class: 'hud' }, h('span', { class: 'chip' }, '아래 질문의 답을 본문에서 찾으세요'), timerEl),
         h('div', { class: 'note' }, h('b', null, p.scan.q)),
         h('div', { class: 'card', style: { marginTop: '10px', maxHeight: '46vh', overflow: 'auto' } },
-          h('div', { class: 'reader', 'data-lang': lang, style: { fontSize: lang === 'zh' ? '1.25rem' : '1.08rem', lineHeight: '1.7' } }, h('div', { class: 'reader-wrap' }, p.text))),
+          h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang, style: { fontSize: lang === 'zh' ? '1.25rem' : '1.08rem', lineHeight: '1.7' } }, h('div', { class: 'reader-wrap' }, p.text))),
         h('div', { style: { marginTop: '12px' } }, input, fb,
           h('button', { class: 'btn btn--primary', style: { marginTop: '10px' }, onClick: check }, '확인')));
     };
@@ -106,7 +107,7 @@ export default {
       mount(root, drillHeader('Mastery · 정독', () => { t.stop(); exit(); }, this.why),
         h('div', { class: 'note note--good' }, '천천히, 정확히. 되돌아 읽어도 됩니다. 끝나면 전체 이해 문제가 나옵니다.'),
         h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'eyebrow' }, p.title || '지문'),
-          h('div', { class: 'reader', 'data-lang': lang }, h('div', { class: 'reader-wrap' }, p.text))),
+          h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang }, h('div', { class: 'reader-wrap' }, p.text))),
         h('div', { class: 'btnrow', style: { marginTop: '12px' } }, h('button', { class: 'btn btn--primary btn--lg', onClick: done }, '다 읽음 → 이해 확인')));
     };
 

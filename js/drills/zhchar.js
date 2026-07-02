@@ -2,6 +2,7 @@
 import { h, mount, shuffle, sample, median } from '../util.js';
 import * as content from '../content.js';
 import * as store from '../store.js';
+import { inBand } from '../levels.js';
 import { drillHeader, askMCQ, resultCard } from './shared.js';
 
 export default {
@@ -26,7 +27,14 @@ export default {
 
     // ---- naming: char -> meaning, timed ----
     const naming = () => {
-      const pool = sample(items, Math.min(12, items.length));
+      // 느리거나 틀렸던 글자 우선 재출제 + 레벨 빈도대 창 우선
+      const lv = store.getLevel('zh') || 'builder';
+      const hard = store.hardKeys('zh');
+      const hardItems = items.filter(x => hard.includes(x.hanzi)).slice(0, 4);
+      const restPool = items.filter(x => !hardItems.includes(x));
+      const inWin = restPool.filter(x => inBand(lv, x.freq_band || x.hsk || 3));
+      const filler = restPool.filter(x => !inWin.includes(x));
+      const pool = shuffle(hardItems.concat(sample(inWin, 12), sample(filler, 12)).slice(0, 12));
       let i = 0; const rts = []; let correct = 0;
       const trial = () => {
         if (i >= pool.length) return finish();
@@ -42,7 +50,10 @@ export default {
         const t0 = performance.now();
         askMCQ(host, item).then(r => {
           const rt = performance.now() - t0;
-          if (r.correct) { correct++; store.addRT('zh', it.freq_band || it.hsk || 3, rt, true); rts.push(rt); }
+          if (r.correct) {
+            correct++; store.addRT('zh', it.freq_band || it.hsk || 3, rt, true); rts.push(rt);
+            if (rt > 2500) store.bumpHard('zh', it.hanzi); else store.easeHard('zh', it.hanzi);
+          } else store.bumpHard('zh', it.hanzi); // 틀리거나 느린 글자는 다음에 더 자주
           i++; trial();
         });
       };

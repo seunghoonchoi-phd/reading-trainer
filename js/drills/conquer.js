@@ -3,6 +3,7 @@
 import { h, mount, clear, startTimer, fmtClock, countUnits, sparkline, sample } from '../util.js';
 import * as content from '../content.js';
 import * as store from '../store.js';
+import { defaultTier, hardestTier } from '../levels.js';
 import { drillHeader, askMCQ, compQuiz, resultCard, tierPicker, tierLabel } from './shared.js';
 
 const MAX_PASS = 3;
@@ -24,13 +25,13 @@ export default {
   id: 'conquer', name: '정복 모드', icon: '⛰️', track: '속도',
   goal: '어려운 글을 1차 독해로 장악 → 반복 속독 → 새 글 전이. 단어를 먼저 해결해야 속도 훈련이 의미 있습니다.',
   langs: ['en', 'zh'],
-  why: '승훈님이 제안한 "1차 독해 → 속독" 루프입니다. ①모르는 단어를 해결해 커버리지를 95%+로 올리고(그 전엔 속도 훈련 잠금), ②같은 글을 3회까지 반복해 자동성을 키우고, ③어휘·주제가 겹치는 새 글에서 차갑게 전이를 측정합니다. 과부하는 어휘·밀도·길이에 걸되, 눈 속도를 이해 붕괴까지 강제하지 않습니다(그건 훑기).',
+  why: '이 앱의 코어 루프인 "1차 독해 → 속독"입니다. ①모르는 단어를 해결해 커버리지(아는 단어 비율)를 95%+로 올리고(그 전엔 속도 훈련 잠금), ②같은 글을 3회까지 반복해 자동성을 키우고, ③어휘·주제가 겹치는 새 글에서 차갑게 전이를 측정합니다. 과부하는 어휘·밀도·길이에 걸되, 눈 속도를 이해 붕괴까지 강제하지 않습니다(그건 훑기).',
   evidence: '반복읽기 같은지문 ES≈0.83(유창성)/0.67(이해), 전이는 약하고 L2 이해 전이는 종종 null(Therrien 2004). 커버리지 95% 선행(Laufer & Ravenhorst-Kalovski). 수면은 단어 학습(서술기억)을 공고화하지 속도(절차)를 빠르게 하지 않음.',
 
   // preset = {title,text,lang} optional (from 내 글)
   render(root, lang, exit, preset) {
-    const tiers = content.tiersFor(lang);
-    let tier = tiers.slice(-1)[0] || tiers[0]; // default hardest
+    // 레벨 창의 최상단이 기본 — “내 수준보다 살짝 어려운 글”이 이 드릴의 정체성
+    let tier = hardestTier(store.getLevel(lang) || 'builder', content.allTiers(lang)) || 2;
 
     const setup = () => {
       if (preset) return phase1(preset, true);
@@ -39,7 +40,7 @@ export default {
           h('h2', { class: 'h2' }, '정복 모드'),
           h('p', { class: 'muted' }, '어려운 글 하나를 끝까지 “정복”합니다: 1차 독해(단어 해결) → 반복 속독 → 새 글 전이.'),
           h('div', { class: 'note small' }, '과부하는 어휘·밀도·길이에 — 눈 속도엔 걸지 않습니다. 이해도는 끝까지 따로 측정합니다.'),
-          tierPicker(tiers, tier, t => { tier = t; setup(); }, lang),
+          tierPicker(lang, tier, t => { tier = t; setup(); }),
           h('div', { class: 'btnrow', style: { marginTop: '14px' } },
             h('button', { class: 'btn btn--primary btn--lg', onClick: () => { const p = content.pickPassage(lang, tier); if (p) phase1(p, false); } }, '시작'))));
     };
@@ -68,7 +69,7 @@ export default {
           ...list.slice(0, 40).map(k => h('span', { class: 'chip', style: { margin: '2px' } }, k + (gloss.get(k) ? ` · ${gloss.get(k)}` : ' · (직접 확인)')))) : h('div', { class: 'note small muted' }, '모르는 단어를 탭하세요. 사전에 있으면 뜻이 보이고, 없으면 직접 확인 후 표시합니다.'));
       };
 
-      const reader = h('div', { class: 'reader', 'data-lang': L });
+      const reader = h('div', { class: 'reader', lang: L === 'zh' ? 'zh-Hans' : 'en', 'data-lang': L });
       const wrap = h('div', { class: 'reader-wrap' });
       toks.forEach(t => {
         if (!t.key) { wrap.append(document.createTextNode(t.text)); return; }
@@ -109,13 +110,20 @@ export default {
       const body = ok
         ? h('div', { class: 'note note--good' }, `커버리지 ${Math.floor(cov * 100)}% · 이해 점검 통과 → 속도 훈련 잠금 해제`)
         : h('div', { class: 'note note--warn' }, cov < COVERAGE_GATE
-          ? `커버리지 ${Math.floor(cov * 100)}% (95% 미만). 모르는 단어를 먼저 해결하세요 — 단어를 모른 채 속도만 올리면 “빠른 오독” 훈련이 됩니다. 표시한 단어는 복습 큐에 담았습니다.`
+          ? `커버리지 ${Math.floor(cov * 100)}% (95% 미만). 모르는 단어를 먼저 해결하세요 — 단어를 모른 채 속도만 올리면 “빠른 오독” 훈련이 됩니다. 표시한 단어는 어휘 카드 복습 큐에 담았고, 「훈련 → 어휘·인지속도」에서 다시 만납니다.`
           : `이해 점검을 통과하지 못했습니다. 다시 1차 독해부터 — 이해 못 한 글은 자동화할 수 없습니다.`);
+      // 막다른 길 방지: 한 단계 쉬운 글로 우회하는 출구 제공
+      const allT = content.allTiers(L);
+      const easier = allT.filter(t => t < (p.tier || tier)).slice(-1)[0];
+      const easierBtn = (!ok && !isPreset && easier) ? h('button', {
+        class: 'btn', onClick: () => { const np = content.pickPassage(L, easier); if (np) phase1(np, false); },
+      }, `한 단계 쉬운 글로 (${tierLabel(easier, L)})`) : null;
       mount(root, drillHeader(this.name, exit, null),
         h('div', { class: 'card fade-in' }, body,
           h('div', { class: 'btnrow', style: { marginTop: '12px' } },
             ok ? h('button', { class: 'btn btn--primary btn--lg', onClick: () => phase2(p, isPreset, L) }, '반복 속독 시작 (최대 3회)')
               : h('button', { class: 'btn btn--primary', onClick: () => phase1(p, isPreset) }, '1차 독해 다시'),
+            easierBtn,
             !ok ? h('button', { class: 'btn btn--ghost', onClick: () => phase2(p, isPreset, L), title: '권장하지 않음' }, '그래도 진행') : null)));
     };
 
@@ -138,7 +146,7 @@ export default {
         mount(root, drillHeader(`반복 속독 ${n + 1}/${MAX_PASS}`, () => { t.stop(); exit(); }, this.why),
           h('div', { class: 'hud' }, h('span', { class: 'chip' }, '이해하며 — 빠르게가 아니라'), timerEl),
           h('div', { class: 'card' }, h('div', { class: 'eyebrow' }, p.title || '문헌'),
-            h('div', { class: 'reader', 'data-lang': L }, h('div', { class: 'reader-wrap' }, p.text))),
+            h('div', { class: 'reader', lang: L === 'zh' ? 'zh-Hans' : 'en', 'data-lang': L }, h('div', { class: 'reader-wrap' }, p.text))),
           h('div', { class: 'btnrow', style: { marginTop: '12px' } }, h('button', { class: 'btn btn--primary btn--lg', onClick: done }, '다 읽음 → 미니체크')));
       };
       passView(0);
@@ -174,7 +182,7 @@ export default {
         h('div', { class: 'hud' }, h('span', { class: 'chip' }, '차가운 전이 · 어휘·주제 겹침(근사)'), timerEl),
         h('div', { class: 'note small muted' }, '※ 코퍼스 한계상 “같은 난이도” 지문으로 전이를 근사합니다(이상적 narrow-reading 80% 어휘 재활용은 아님).'),
         h('div', { class: 'card', style: { marginTop: '8px' } }, h('div', { class: 'eyebrow' }, tp.title || '지문'),
-          h('div', { class: 'reader', 'data-lang': L }, h('div', { class: 'reader-wrap' }, tp.text))),
+          h('div', { class: 'reader', lang: L === 'zh' ? 'zh-Hans' : 'en', 'data-lang': L }, h('div', { class: 'reader-wrap' }, tp.text))),
         h('div', { class: 'btnrow', style: { marginTop: '12px' } }, h('button', { class: 'btn btn--primary btn--lg', onClick: done }, '다 읽음 → 이해 확인')));
     };
 

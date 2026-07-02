@@ -17,8 +17,10 @@ H.extensions_map.update({
     '.html': 'text/html',
 })
 
-class Server(socketserver.TCPServer):
+# Threading: 모듈 20여 개 + SW 캐시 프리로드가 동시에 때리면 단일 스레드는 통째로 잠긴다
+class Server(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
+    daemon_threads = True
 
 with Server(('127.0.0.1', PORT), H) as httpd:
     print(f'serving {ROOT} at http://127.0.0.1:{PORT}')

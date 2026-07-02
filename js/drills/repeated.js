@@ -2,6 +2,7 @@
 import { h, mount, startTimer, fmtClock, countUnits, sparkline } from '../util.js';
 import * as content from '../content.js';
 import * as store from '../store.js';
+import { defaultTier } from '../levels.js';
 import { drillHeader, compQuiz, resultCard, tierPicker, tierLabel } from './shared.js';
 
 const REPS = 3;
@@ -14,14 +15,13 @@ export default {
   evidence: '반복읽기는 전이된다 — 단, 속도+이해 이중 단서가 속도만 단서보다 낫고 전이는 관련 지문에 한함(Therrien 2004; LaBerge & Samuels 1974).',
 
   render(root, lang, exit) {
-    const tiers = content.tiersFor(lang);
-    let tier = tiers.includes(2) ? 2 : tiers[Math.floor(tiers.length / 2)] || tiers[0];
+    let tier = defaultTier(store.getLevel(lang) || 'builder', content.allTiers(lang)) || 2;
 
     const setup = () => mount(root, drillHeader(this.name, exit, this.why),
       h('div', { class: 'card fade-in' },
         h('h2', { class: 'h2' }, '반복읽기 전이'),
-        h('p', { class: 'muted' }, `같은 지문을 ${REPS}번 읽어 속도 곡선을 만든 뒤, 비슷한 새 지문으로 전이를 확인합니다.`),
-        tierPicker(tiers, tier, t => { tier = t; setup(); }, lang),
+        h('p', { class: 'muted' }, `같은 지문을 ${REPS}번 읽어 속도 곡선을 만든 뒤, 비슷한 새 지문으로 전이(새 글에서도 유지되는 향상)를 확인합니다.`),
+        tierPicker(lang, tier, t => { tier = t; setup(); }),
         h('div', { class: 'btnrow', style: { marginTop: '14px' } },
           h('button', { class: 'btn btn--primary btn--lg', onClick: () => start() }, '시작'))));
 
@@ -40,7 +40,7 @@ export default {
         mount(root, drillHeader(`반복읽기 ${rep + 1}/${REPS}`, () => { t.stop(); exit(); }, this.why),
           h('div', { class: 'hud' }, h('span', { class: 'chip' }, `${tierLabel(tier, lang)} · ${rep + 1}회차`), timerEl),
           h('div', { class: 'card' }, h('div', { class: 'eyebrow' }, p.title || '지문'),
-            h('div', { class: 'reader', 'data-lang': lang }, h('div', { class: 'reader-wrap' }, p.text))),
+            h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang }, h('div', { class: 'reader-wrap' }, p.text))),
           h('div', { class: 'btnrow', style: { marginTop: '12px' } },
             h('button', { class: 'btn btn--primary btn--lg', onClick: done }, rep + 1 < REPS ? '다 읽음 → 다음 회차' : '다 읽음 → 전이 검사')));
       };
@@ -69,7 +69,7 @@ export default {
         mount(root, drillHeader('전이 지문 (새 글)', () => { t.stop(); exit(); }, this.why),
           h('div', { class: 'hud' }, h('span', { class: 'chip' }, '새 관련 지문'), timerEl),
           h('div', { class: 'card' }, h('div', { class: 'eyebrow' }, tp.title || '지문'),
-            h('div', { class: 'reader', 'data-lang': lang }, h('div', { class: 'reader-wrap' }, tp.text))),
+            h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang }, h('div', { class: 'reader-wrap' }, tp.text))),
           h('div', { class: 'btnrow', style: { marginTop: '12px' } },
             h('button', { class: 'btn btn--primary btn--lg', onClick: done }, '다 읽음 → 이해 확인')));
       };

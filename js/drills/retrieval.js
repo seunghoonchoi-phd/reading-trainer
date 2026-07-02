@@ -2,6 +2,7 @@
 import { h, mount } from '../util.js';
 import * as content from '../content.js';
 import * as store from '../store.js';
+import { defaultTier } from '../levels.js';
 import { drillHeader, compQuiz, resultCard, tierPicker, tierLabel } from './shared.js';
 
 export default {
@@ -12,8 +13,7 @@ export default {
   evidence: '인출+분산연습 HIGH 유틸리티, 자기설명 MODERATE(Dunlosky 2013); 지연 시 인출이 재독을 능가(Roediger & Karpicke 2006).',
 
   render(root, lang, exit) {
-    const tiers = content.tiersFor(lang);
-    let tier = tiers.includes(3) ? 3 : tiers[Math.floor(tiers.length / 2)] || tiers[0];
+    let tier = defaultTier(store.getLevel(lang) || 'builder', content.allTiers(lang)) || 3;
     const deck = 'retr-' + lang;
 
     const setup = () => {
@@ -23,7 +23,7 @@ export default {
           h('h2', { class: 'h2' }, '자기설명·인출'),
           h('p', { class: 'muted' }, '읽기 → 덮고 떠올리기 → 자기설명 → 인출 퀴즈. 항목은 지연 복습 일정으로 다시 나타납니다.'),
           due.length ? h('div', { class: 'note note--good' }, `복습 예정 인출 항목 ${due.length}개`) : null,
-          tierPicker(tiers, tier, t => { tier = t; setup(); }, lang),
+          tierPicker(lang, tier, t => { tier = t; setup(); }),
           h('div', { class: 'btnrow', style: { marginTop: '14px' } },
             h('button', { class: 'btn btn--primary btn--lg', onClick: () => read(due[0]) }, due.length ? '복습 시작' : '시작'))));
     };
@@ -34,7 +34,7 @@ export default {
       mount(root, drillHeader('읽기', exit, this.why),
         h('div', { class: 'note note--good' }, '깊이 읽으세요. 다 읽으면 “덮고 떠올리기”로 넘어갑니다.'),
         h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'eyebrow' }, p.title || '지문'),
-          h('div', { class: 'reader', 'data-lang': lang }, h('div', { class: 'reader-wrap' }, p.text))),
+          h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang }, h('div', { class: 'reader-wrap' }, p.text))),
         h('div', { class: 'btnrow', style: { marginTop: '12px' } }, h('button', { class: 'btn btn--primary btn--lg', onClick: () => recall(p) }, '덮기 → 떠올리기')));
     };
 
@@ -49,7 +49,7 @@ export default {
 
     const explain = (p, recallText) => {
       const ta = h('textarea', { rows: 3, placeholder: '이 글의 핵심 주장을 한 문장으로 “왜 그런지”까지 설명해보세요.' });
-      const cmp = h('details', { class: 'why' }, h('summary', null), h('div', null, h('div', { class: 'reader', 'data-lang': lang, style: { fontSize: lang === 'zh' ? '1.2rem' : '1rem' } }, h('div', { class: 'reader-wrap' }, p.text))));
+      const cmp = h('details', { class: 'why' }, h('summary', null), h('div', null, h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang, style: { fontSize: lang === 'zh' ? '1.2rem' : '1rem' } }, h('div', { class: 'reader-wrap' }, p.text))));
       mount(root, drillHeader('자기설명', exit, this.why),
         h('div', { class: 'note' }, '핵심을 “설명”하세요. 빈 말·순환 설명이면 아직 이해가 덜 된 것입니다.'),
         h('div', { style: { marginTop: '10px' } }, ta),

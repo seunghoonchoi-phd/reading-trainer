@@ -3,3 +3,6 @@ Thumbs.db
 node_modules/
 *.log
 _build/*.output
+.claude/
+_audit_*
+_build/site-path.local.txt

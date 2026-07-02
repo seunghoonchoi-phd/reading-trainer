@@ -3,7 +3,8 @@ import { h, mount, startTimer, fmtClock } from '../util.js';
 import * as content from '../content.js';
 import { splitParagraphs, splitSentences } from '../content.js';
 import * as store from '../store.js';
-import { drillHeader, resultCard } from './shared.js';
+import { hardestTier } from '../levels.js';
+import { drillHeader, resultCard, setTeardown } from './shared.js';
 
 const FIVE_C = [
   ['Category', '범주', '어떤 종류의 글인가? (실험/이론/리뷰…)'],
@@ -22,7 +23,7 @@ export default {
 
   // preset = {title, text, lang} optional (from 내 글)
   render(root, lang, exit, preset) {
-    const src = preset || content.pickPassage(lang, content.tiersFor(lang).slice(-1)[0]);
+    const src = preset || content.pickPassage(lang, hardestTier(store.getLevel(lang) || 'builder', content.allTiers(lang)));
     if (!src) { mount(root, drillHeader(this.name, exit), h('div', { class: 'empty' }, '논문/지문이 없습니다. “내 글” 탭에서 논문 단락을 붙여넣어 보세요.')); return; }
     const text = src.text, L = src.lang || lang;
     const paras = splitParagraphs(text);
@@ -32,6 +33,7 @@ export default {
       let left = sec;
       const timerEl = h('span', { class: 'hud__timer' }, fmtClock(left * 1000));
       const iv = setInterval(() => { left--; timerEl.textContent = fmtClock(Math.max(0, left) * 1000); if (left <= 0) clearInterval(iv); }, 1000);
+      setTeardown(() => clearInterval(iv));
       const leads = paras.map(p => (splitSentences(p, L)[0] || p)).filter(Boolean);
       const fields = FIVE_C.map(([en, ko, hint]) =>
         h('div', { style: { marginBottom: '8px' } },
@@ -45,7 +47,7 @@ export default {
       mount(root, drillHeader('1패스 · 구조 훑기 (5분 룰)', () => { clearInterval(iv); exit(); }, this.why),
         h('div', { class: 'hud' }, h('span', { class: 'chip' }, '구조만 봅니다: 제목·첫 문장·결론'), timerEl),
         h('div', { class: 'card' }, h('div', { class: 'eyebrow' }, src.title || '문헌'),
-          h('div', { class: 'reader', 'data-lang': L, style: { fontSize: L === 'zh' ? '1.2rem' : '1.05rem', lineHeight: '1.8' } },
+          h('div', { class: 'reader', lang: L === 'zh' ? 'zh-Hans' : 'en', 'data-lang': L, style: { fontSize: L === 'zh' ? '1.2rem' : '1.05rem', lineHeight: '1.8' } },
             h('div', { class: 'reader-wrap' }, ...leads.map(s => h('p', { style: { margin: '0 0 .5em' } }, '• ', s))))),
         h('div', { class: 'card', style: { marginTop: '12px' } }, h('div', { class: 'eyebrow' }, '5C 메모'), ...fields),
         h('div', { class: 'btnrow' },
@@ -58,7 +60,7 @@ export default {
       mount(root, drillHeader('2패스 · 내용 + 그림', exit, this.why),
         h('div', { class: 'note' }, '본문과 그림을 읽되 증명·세부 유도는 건너뜁니다. 한 문장으로 핵심 기여를 적으세요.'),
         h('div', { class: 'card', style: { marginTop: '10px', maxHeight: '46vh', overflow: 'auto' } },
-          h('div', { class: 'reader', 'data-lang': L, style: { fontSize: L === 'zh' ? '1.25rem' : '1.08rem', lineHeight: '1.75' } }, h('div', { class: 'reader-wrap' }, text))),
+          h('div', { class: 'reader', lang: L === 'zh' ? 'zh-Hans' : 'en', 'data-lang': L, style: { fontSize: L === 'zh' ? '1.25rem' : '1.08rem', lineHeight: '1.75' } }, h('div', { class: 'reader-wrap' }, text))),
         h('div', { style: { marginTop: '12px' } }, h('label', { class: 'field' }, '핵심 기여 (한 문장)'), input,
           h('div', { class: 'btnrow', style: { marginTop: '10px' } },
             h('button', { class: 'btn btn--primary', onClick: pass3 }, '깊이 이해 필요 → 3패스'),
