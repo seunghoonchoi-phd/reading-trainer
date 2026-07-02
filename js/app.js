@@ -3,6 +3,7 @@ import { h, mount, $, $$, clear, countUnits, startTimer, fmtClock, sparkline, me
 import * as store from './store.js';
 import * as content from './content.js';
 import { LEVELS, LEVEL_ORDER, levelOf, defaultTier, recommendLevel } from './levels.js';
+import { path as progressionPath } from './progression.js';
 import { DRILLS, TRACKS, DRILL_BY_ID } from './drills/index.js';
 import { renderTheory } from './theory.js';
 import { compQuiz, setTeardown, runTeardown } from './drills/shared.js';
@@ -125,27 +126,28 @@ function catalogBlocks() {
 function sessionDoneToday(drillId) {
   return store.sessionsToday().some(s => s.drill === drillId || s.drill.startsWith(drillId + '-'));
 }
-// Balanced 3-step session: coverage → core rate → strategy/retention. 레벨에 맞춰 편성.
+// 오늘의 코스: 도장깨기 경로에서 파생 — 워밍업(커버리지) → 지금 도전 단계 → 정복한 드릴 유지 로테이션.
 function pickSession(lng) {
-  const lv = store.getLevel(lng) || 'builder';
-  const gentle = lv === 'starter' || lv === 'builder';
   const valid = id => DRILL_BY_ID[id] && DRILL_BY_ID[id].langs.includes(lng);
+  const prog = progressionPath(lng);
+  const unlocked = prog.stages.filter(s => s.unlocked).map(s => s.drillId).filter(valid);
+  const active = prog.stages.find(s => !s.cleared);
   const out = [];
-  // 1) coverage opener — 중국어는 어휘/글자인지/분할을 날짜 로테이션
-  if (lng === 'zh') {
-    const cov = ['vocab', 'zhchar', 'zhseg'].filter(valid);
-    if (cov.length) out.push(cov[new Date().getDate() % cov.length]);
-  } else if (valid('vocab')) out.push('vocab');
-  // 2) core rate — 입문·중급은 정복 모드 대신 ERR/반복읽기부터
-  const core = (gentle ? ['err', 'repeated'] : ['conquer', 'err', 'repeated']).filter(valid);
-  if (core.length) out.push(core[new Date().getDate() % core.length]);
-  // 3) strategy / retention — 논문 3-패스는 상급·과부하에서만 기본 편성
-  const strat = (gentle ? ['retrieval', 'modes', 'preview'] : ['retrieval', 'modes', 'triage']).filter(valid);
-  const intense = store.sessionsToday().filter(s => /^(conquer|err|repeated)/.test(s.drill)).length;
-  let third = valid('retrieval') ? 'retrieval' : strat[0];
-  if (valid('retrieval') && intense === 0 && strat.length) third = strat[new Date().getDate() % strat.length];
-  if (third) out.push(third);
-  return [...new Set(out)].filter(valid).slice(0, 3);
+  // 1) 워밍업 — 커버리지(어휘)가 열려 있으면 항상 먼저
+  if (unlocked.includes('vocab')) out.push('vocab');
+  // 2) 도전 — 지금 깨야 할 단계
+  if (active && valid(active.drillId)) out.push(active.drillId);
+  // 3) 유지 — 이미 정복한 드릴을 날짜 로테이션 (실력 유지·간격 복습)
+  const cleared = prog.stages.filter(s => s.cleared && s.drillId !== 'vocab').map(s => s.drillId).filter(valid);
+  if (cleared.length) out.push(cleared[new Date().getDate() % cleared.length]);
+  // 전부 정복(완성) 상태 — 코어·전략 다양성 로테이션으로 유지 훈련
+  if (!active) {
+    const core = ['conquer', 'err', 'repeated'].filter(valid);
+    if (core.length) out.push(core[new Date().getDate() % core.length]);
+    const strat = ['retrieval', 'modes', 'preview', 'triage'].filter(valid);
+    if (strat.length) out.push(strat[(new Date().getDate() + 1) % strat.length]);
+  }
+  return [...new Set(out)].slice(0, 3);
 }
 
 function goalRing(done, goal) {
@@ -316,13 +318,82 @@ function renderHome() {
       installPrompt ? h('a', { href: '#', onClick: e => { e.preventDefault(); installPrompt.prompt(); } }, icon('install', { size: 16 }), '앱으로 설치') : null)));
 }
 
-/* ---------- TRAIN catalog ---------- */
+/* ---------- TRAIN = 도장깨기 정복 경로 ---------- */
 function renderTrain() {
+  // 자유 훈련(잠금 해제) 모드 — 설정에서 켤 수 있음
+  if (store.getSetting('freePlay')) {
+    mount(view, h('div', { class: 'fade-in' },
+      h('h1', { class: 'h1' }, '훈련 · 자유 모드'),
+      h('p', { class: 'lead' }, '모든 드릴이 열려 있습니다. ',
+        h('a', { href: '#settings', class: 'plainlink', onClick: e => { e.preventDefault(); go('settings'); } }, '설정에서 도장깨기(순차 정복)로 되돌리기')),
+      ...catalogBlocks()));
+    return;
+  }
+
+  const prog = progressionPath(lang);
+  const activeIdx = prog.stages.findIndex(s => !s.cleared);
+
+  const header = h('div', { class: 'quest-head' },
+    h('div', { class: 'quest-head__row' },
+      h('div', null,
+        h('div', { class: 'eyebrow' }, (lang === 'en' ? 'ENGLISH' : '中文') + ' · ' + levelOf(prog.level).label + ' 도장'),
+        h('h1', { class: 'h1', style: { margin: 0 } }, '정복 경로'),
+        h('p', { class: 'small muted', style: { margin: '6px 0 0' } }, '위에서 아래로, 기준을 통과해야 다음 단계가 열립니다. 전부 정복하면 레벨 승급 — 최상급까지 깨면 완성.')),
+      h('div', { class: 'quest-head__score' },
+        h('span', { class: 'quest-head__num' }, `${prog.clearedCount}`),
+        h('span', { class: 'quest-head__den' }, `/ ${prog.total} 정복`))),
+    h('div', { class: 'bar', style: { marginTop: '12px' } },
+      h('div', { class: 'bar__fill', style: { width: Math.round(prog.clearedCount / prog.total * 100) + '%' } })));
+
+  const stageCards = prog.stages.map((s, i) => {
+    const d = DRILL_BY_ID[s.drillId];
+    const isActive = i === activeIdx;
+    const state = s.cleared ? 'clear' : (s.unlocked ? 'active' : 'locked');
+    const pct = Math.round(Math.min(1, s.cur / s.goal) * 100);
+    const isFinal = i === prog.stages.length - 1;
+    return h('div', { class: `quest quest--${state}` + (isFinal ? ' quest--final' : '') },
+      h('div', { class: 'quest__badge' },
+        s.cleared ? icon('check', { size: 16 }) : (s.unlocked ? String(s.idx) : icon('lock', { size: 15 }))),
+      h('div', { class: 'quest__body' },
+        h('div', { class: 'quest__top' },
+          h('span', { class: 'iconchip quest__chip' }, icon(DRILL_ICON[s.drillId] || 'dot')),
+          h('div', { class: 'quest__names' },
+            h('div', { class: 'quest__name' }, (isFinal ? '최종 관문 · ' : '') + d.name),
+            h('div', { class: 'quest__state' },
+              s.cleared ? '정복' : (s.unlocked ? (isActive ? '지금 도전' : '도전 가능') : '이전 단계를 정복하면 열립니다'))),
+          s.unlocked ? h('button', { class: 'btn ' + (isActive ? 'btn--primary' : ''), onClick: () => launch(d) }, s.cleared ? '다시' : '도전') : null),
+        h('div', { class: 'quest__gate' }, '기준: ' + s.gate),
+        !s.cleared && s.unlocked ? h('div', { class: 'quest__prog' },
+          h('div', { class: 'bar' }, h('div', { class: 'bar__fill', style: { width: pct + '%' } })),
+          h('span', { class: 'quest__detail' }, s.detail)) : null,
+        s.cleared ? h('div', { class: 'quest__detail quest__detail--clear' }, s.detail) : null));
+  });
+
+  // 레벨 정복 / 완성 카드
+  let finale = null;
+  if (prog.conquered) {
+    if (prog.nextLevel) {
+      const next = LEVELS[prog.nextLevel];
+      finale = h('div', { class: 'hero', style: { marginTop: '16px' } },
+        h('div', { class: 'hero__eyebrow' }, icon('level', { size: 15 }), '도장 정복'),
+        h('div', { class: 'hero__name' }, `${levelOf(prog.level).label} 도장을 전부 깼습니다`),
+        h('div', { class: 'hero__goal' }, `다음 도장: ${next.label} (${next.sub[lang]}) — 더 어려운 지문에서 같은 경로를 다시 정복합니다. 읽기 단계(정독·전이·정복)는 새 난이도 기준으로 다시 잠깁니다.`),
+        h('button', { class: 'hero__cta', onClick: () => { if (confirm(`${next.label} 도장으로 승급할까요?`)) { store.setLevel(lang, prog.nextLevel); render(); } } }, icon('arrow'), `${next.label} 도장 입장`));
+    } else {
+      finale = h('div', { class: 'hero', style: { marginTop: '16px' } },
+        h('div', { class: 'hero__eyebrow' }, icon('check', { size: 15 }), '완성'),
+        h('div', { class: 'hero__name' }, '최상급 도장까지 전부 정복 — 완성입니다'),
+        h('div', { class: 'hero__goal' }, '여기서부터는 유지 모드입니다: 오늘의 코스로 감을 유지하고, 「내 글」에 실제 읽는 책·논문을 붙여넣어 실전 전이를 이어가세요. 향상은 언제나 새 지문에서만 진짜입니다.'));
+    }
+  }
+
   mount(view, h('div', { class: 'fade-in' },
-    h('h1', { class: 'h1' }, '훈련'),
-    h('p', { class: 'lead' }, '커버리지(아는 단어 비율) → 속도 → 전략 순으로 쌓으세요. 위 ' + (lang === 'en' ? 'English/中文' : '中文/English') + ' 전환에 따라 드릴이 바뀝니다. ',
-      h('a', { href: '#theory', class: 'plainlink', onClick: e => { e.preventDefault(); go('theory'); } }, '왜 이 순서인가 → 원리')),
-    ...catalogBlocks()));
+    header,
+    h('div', { class: 'quest-path' }, ...stageCards),
+    finale,
+    h('div', { class: 'linkrow' },
+      h('a', { href: '#theory', onClick: e => { e.preventDefault(); go('theory'); } }, icon('theory', { size: 16 }), '왜 이 순서인가 — 원리'),
+      h('a', { href: '#settings', onClick: e => { e.preventDefault(); go('settings'); } }, icon('gear', { size: 16 }), '자유 훈련으로 전환'))));
 }
 
 function launch(drill) {
@@ -623,6 +694,13 @@ function renderSettings() {
       levelPicker('zh'),
       h('p', { class: 'small muted', style: { marginTop: '10px' } },
         '최상급·과부하는 최고난도 지문(영 C2+/중 HSK6+)과 전공(재료과학) 지문까지 포함합니다 — 한계 바로 위 부하로 훈련하고 싶을 때 고르세요. 드릴 안에서 난이도를 개별 선택할 수도 있습니다.')),
+
+    h('div', { class: 'card' },
+      h('h2', { class: 'h2' }, '훈련 방식'),
+      h('label', { class: 'row', style: { gap: '10px', cursor: 'pointer' } },
+        h('input', { type: 'checkbox', checked: !store.getSetting('freePlay'), onChange: e => { store.setSetting('freePlay', !e.target.checked); renderSettings(); } }),
+        h('span', null, '도장깨기 (순차 정복) ', h('span', { class: 'small muted' }, '— 기준을 통과해야 다음 훈련이 열립니다. 끄면 모든 드릴 자유 이용.'))),
+      h('p', { class: 'small muted', style: { marginTop: '8px' } }, '클리어는 "한 번 해봄"이 아니라 측정된 기준 통과로 판정되고, 기존 기록에서 자동 소급됩니다.')),
 
     h('div', { class: 'card' },
       h('h2', { class: 'h2' }, '화면'),

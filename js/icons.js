@@ -12,6 +12,9 @@ export const ICONS = {
   modes:     SVG('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.1"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>'), // target — choose depth
   triage:    SVG('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/><path d="M8.5 12.5h7M8.5 16h4"/>'), // paper, 3-pass
   retrieval: SVG('<path d="M9.5 18h5"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.8 10.6c.5.5.8 1.1.8 1.8V16h6v-.6c0-.7.3-1.3.8-1.8A6 6 0 0 0 12 3Z"/>'), // bulb — recall
+  chunk:     SVG('<path d="M3.5 9.5c0-2 1.4-3 3-3h2M3.5 14.5c0 2 1.4 3 3 3h2"/><path d="M20.5 9.5c0-2-1.4-3-3-3h-2M20.5 14.5c0 2-1.4 3-3 3h-2"/><path d="M9.5 12h5" stroke-dasharray="2 2.6"/>'), // 묶는 괄호 — 구 단위 처리
+  sentence:  SVG('<path d="M3.5 6.5h17M3.5 12h11"/><path d="m16 15.5 2.2 2.2 4-4.4" stroke-width="2"/>'), // 문장 줄 + 검증 체크
+  context:   SVG('<path d="M9 8.6c0-1.9 1.3-3.1 3.1-3.1 1.9 0 3.1 1.2 3.1 2.9 0 2.6-3.2 2.7-3.2 5"/><circle cx="12" cy="17.6" r="1.3" fill="currentColor" stroke="none"/>'), // 물음표 — 추론
   zhseg:     SVG('<path d="M12 3.5v17"/><path d="M6.5 7.5v9M17.5 7.5v9" stroke-dasharray="2.2 3"/>'), // word boundary
   zhchar:    SVG('<rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M12 4v16M4 12h16"/>'), // 田 — character grid
   preview:   SVG('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/>'), // eye — preview/use span
@@ -43,8 +46,8 @@ export const ICONS = {
 
 // drill id -> icon name (ids already match ICONS keys, but keep an explicit map for safety)
 export const DRILL_ICON = {
-  vocab: 'vocab', conquer: 'conquer', err: 'err', repeated: 'repeated', modes: 'modes',
-  triage: 'triage', retrieval: 'retrieval', zhseg: 'zhseg', zhchar: 'zhchar', preview: 'preview',
+  vocab: 'vocab', chunk: 'chunk', sentence: 'sentence', conquer: 'conquer', err: 'err', repeated: 'repeated',
+  context: 'context', modes: 'modes', triage: 'triage', retrieval: 'retrieval', zhseg: 'zhseg', zhchar: 'zhchar', preview: 'preview',
 };
 
 export function icon(name, opts = {}) {

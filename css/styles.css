@@ -294,6 +294,45 @@ body {
 .pacer-seg { background: linear-gradient(transparent 62%, var(--accent-soft) 62%); border-radius: 2px; transition: background .08s linear; }
 .pacer-active { background: var(--accent); color: var(--on-accent); border-radius: 3px; }
 
+/* chunk drill: phrase-cued scaffolds */
+.phrase--strong.phrase--alt { background: var(--accent-soft); border-radius: 4px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.phrase--strong { padding: 1px 2px; }
+.phrase--soft { padding: 1px 2px; }
+.phrase--soft.phrase--alt { background: linear-gradient(transparent 72%, var(--accent-soft) 72%); border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+
+/* ---- 도장깨기 정복 경로 ---- */
+.quest-head { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); margin-bottom: 16px; }
+.quest-head__row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.quest-head__score { text-align: right; white-space: nowrap; }
+.quest-head__num { font-family: var(--mono); font-size: 1.8rem; font-weight: 700; color: var(--accent-ink); }
+.quest-head__den { font-size: .82rem; color: var(--ink-faint); font-weight: 700; margin-left: 3px; }
+.quest-path { display: grid; gap: 0; }
+.quest { display: flex; gap: 12px; position: relative; padding: 7px 0; }
+.quest::before { content: ""; position: absolute; left: 14px; top: 0; bottom: 0; width: 2px; background: var(--line); }
+.quest:first-child::before { top: 14px; }
+.quest:last-child::before { bottom: auto; height: 20px; }
+.quest__badge { flex: none; width: 29px; height: 29px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-family: var(--mono); font-weight: 700; font-size: .85rem; margin-top: 12px; position: relative; z-index: 1; background: var(--surface-2); color: var(--ink-faint); border: 2px solid var(--line-strong); }
+.quest--clear .quest__badge { background: var(--good-soft); color: var(--good); border-color: var(--good); }
+.quest--active .quest__badge { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.quest__body { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 13px 15px; box-shadow: var(--shadow); margin: 4px 0; }
+.quest--active .quest__body { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), var(--shadow); }
+.quest--locked .quest__body { opacity: .62; background: var(--bg-elev); box-shadow: none; }
+.quest--final .quest__body { border-left: 3px solid var(--gold); }
+.quest__top { display: flex; align-items: center; gap: 11px; }
+.quest__chip { width: 34px; height: 34px; border-radius: 9px; }
+.quest__chip .icon svg { width: 19px; height: 19px; }
+.quest--locked .quest__chip { background: var(--surface-2); color: var(--ink-faint); }
+.quest__names { flex: 1; min-width: 0; }
+.quest__name { font-weight: 800; letter-spacing: -.01em; }
+.quest__state { font-size: .76rem; font-weight: 700; color: var(--ink-faint); }
+.quest--active .quest__state { color: var(--accent-ink); }
+.quest--clear .quest__state { color: var(--good); }
+.quest__gate { font-size: .82rem; color: var(--ink-soft); margin-top: 8px; }
+.quest__prog { display: flex; align-items: center; gap: 10px; margin-top: 9px; }
+.quest__prog .bar { flex: 1; }
+.quest__detail { font-family: var(--mono); font-size: .74rem; color: var(--ink-faint); white-space: nowrap; }
+.quest__detail--clear { margin-top: 7px; color: var(--good); white-space: normal; }
+
 /* conquer: tap-to-mark unknown words */
 .tok { cursor: pointer; border-radius: 3px; transition: background .08s ease; }
 .tok:hover { background: var(--surface-2); }

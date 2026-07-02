@@ -1,11 +1,12 @@
 // ===== service worker — offline app shell =====
 // 파일 추가/삭제/개명 시 반드시 ASSETS 동기화 + CACHE 버전 bump (addAll은 하나만 404여도 통째로 실패)
-const CACHE = 'readfast-v9';
+const CACHE = 'readfast-v10';
 const ASSETS = [
   './', './index.html', './css/styles.css',
-  './js/app.js', './js/icons.js', './js/util.js', './js/store.js', './js/content.js', './js/theory.js', './js/levels.js',
+  './js/app.js', './js/icons.js', './js/util.js', './js/store.js', './js/content.js', './js/theory.js', './js/levels.js', './js/progression.js',
   './js/drills/index.js', './js/drills/shared.js',
-  './js/drills/vocab.js', './js/drills/conquer.js', './js/drills/err.js', './js/drills/repeated.js', './js/drills/modes.js',
+  './js/drills/vocab.js', './js/drills/chunk.js', './js/drills/sentence.js', './js/drills/context.js',
+  './js/drills/conquer.js', './js/drills/err.js', './js/drills/repeated.js', './js/drills/modes.js',
   './js/drills/triage.js', './js/drills/retrieval.js', './js/drills/zhseg.js', './js/drills/zhchar.js', './js/drills/preview.js',
   './data/passages.json', './data/vocab_en.json', './data/vocab_zh.json', './data/seg_zh.json',
   './manifest.webmanifest', './icon.svg',
