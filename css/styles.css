@@ -159,8 +159,8 @@ body {
 .h2 { font-size: 1.12rem; font-weight: 800; margin: 0 0 10px; letter-spacing: -.01em; }
 .lead { color: var(--ink-soft); margin: 0 0 18px; }
 /* eyebrow / track-label: 한글에는 자간 금지 (B2). 라틴/숫자 전용 라벨만 --latin 변형으로 uppercase+자간. */
-.eyebrow { font-family: var(--mono); font-size: .75rem; font-weight: 800; letter-spacing: 0; color: var(--gold); margin: 0 0 6px; }
-.eyebrow--latin { text-transform: uppercase; letter-spacing: .12em; }
+.eyebrow { font-family: var(--ui); font-size: .75rem; font-weight: 700; letter-spacing: 0; color: var(--gold); margin: 0 0 6px; }
+.eyebrow--latin { font-family: var(--mono); text-transform: uppercase; letter-spacing: .12em; }
 .muted { color: var(--ink-faint); }
 .small { font-size: .82rem; }
 .plainlink { color: var(--accent-ink); font-weight: 700; text-decoration: none; }
@@ -210,7 +210,7 @@ body {
 .tile__name { font-weight: 800; letter-spacing: -.01em; }
 .tile__goal { color: var(--ink-soft); font-size: .86rem; line-height: 1.5; }
 /* track-label: 한글 자간 금지 (B2) */
-.track-label { font-family: var(--mono); font-size: .72rem; font-weight: 800; letter-spacing: 0; color: var(--ink-faint); margin: 22px 0 8px; display: flex; align-items: center; gap: 7px; }
+.track-label { font-family: var(--ui); font-size: .72rem; font-weight: 700; letter-spacing: 0; color: var(--ink-faint); margin: 22px 0 8px; display: flex; align-items: center; gap: 7px; }
 
 /* ---- Today screen: status strip ---- */
 .today-status { display: flex; align-items: center; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); flex-wrap: wrap; }
@@ -238,11 +238,11 @@ body {
 
 /* ---- Today screen: hero (the single dominant CTA) ---- */
 .hero { background: linear-gradient(150deg, var(--hero-from) 0%, var(--hero-to) 100%); color: var(--hero-ink); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow-lg); position: relative; overflow: hidden; }
-.hero__eyebrow { font-family: var(--mono); font-size: .72rem; font-weight: 800; letter-spacing: 0; opacity: .85; margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+.hero__eyebrow { font-family: var(--ui); font-size: .72rem; font-weight: 700; letter-spacing: 0; opacity: .85; margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
 .hero__row { display: flex; align-items: center; gap: 14px; }
 .hero__body { flex: 1; min-width: 0; }
 /* B5 세리프 디스플레이(절제): 히어로 이름 1곳 — 권위감을 UI 표면으로 */
-.hero__name { font-family: var(--reading-serif); font-size: 1.42rem; font-weight: 700; letter-spacing: -.01em; line-height: 1.2; }
+.hero__name { font-family: var(--ui); font-size: 1.42rem; font-weight: 800; letter-spacing: 0; line-height: 1.25; }
 .hero__name:lang(zh) { font-family: var(--reading-zh); }
 .hero__goal { font-size: .9rem; opacity: .9; margin-top: 4px; line-height: 1.45; }
 .hero__cta { width: 100%; margin-top: 16px; background: var(--hero-cta-bg); color: var(--hero-cta-ink); border: 0; border-radius: var(--radius); padding: 14px; font-family: inherit; font-weight: 800; font-size: 1.05rem; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 9px; box-shadow: 0 2px 10px rgba(0,0,0,.12); transition: transform .05s ease, filter .12s ease; }
@@ -346,7 +346,7 @@ body {
 .quest-head__row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .quest-head__score { text-align: right; white-space: nowrap; }
 /* B5 세리프 디스플레이(절제): 정복 경로 큰 점수 1곳 */
-.quest-head__num { font-family: var(--reading-serif); font-size: 2rem; font-weight: 700; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
+.quest-head__num { font-family: var(--ui); font-size: 2rem; font-weight: 800; color: var(--accent-ink); font-variant-numeric: tabular-nums; }
 .quest-head__den { font-size: .82rem; color: var(--ink-faint); font-weight: 700; margin-left: 3px; }
 .quest-path { display: grid; gap: 0; }
 .quest { display: flex; gap: 12px; position: relative; padding: 7px 0; }

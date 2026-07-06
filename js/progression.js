@@ -156,7 +156,6 @@ export function path(lang) {
   // 매 판정 시 최초 스냅샷을 보장 (boot에서 놓쳐도 안전) + 새 클리어 append
   seedClears(lang);
   const stages = [];
-  let prevCleared = true;
   for (const key of ORDER[lang]) {
     const def = STAGE_DEFS[key];
     const r = rawStageResult(lang, key);
@@ -164,8 +163,8 @@ export function path(lang) {
     if (r.sessionCleared) store.markCleared(lang, clearKey(lang, key));
     // 클리어 = durable 원장에 있음 OR 이번 세션 판정 통과 (둘 중 하나면 클리어 — 도장 안 풀림)
     const cleared = store.isCleared(lang, clearKey(lang, key)) || r.sessionCleared;
-    stages.push({ key, drillId: def.drillId, gate: def.gate, cur: r.cur, goal: r.goal, detail: r.detail, cleared, unlocked: prevCleared || cleared, idx: stages.length + 1 });
-    prevCleared = prevCleared && cleared;
+    // 잠금 없음(2026-07-06 사용자 결정): 순서는 권장 경로일 뿐, 어느 단계든 바로 도전 가능.
+    stages.push({ key, drillId: def.drillId, gate: def.gate, cur: r.cur, goal: r.goal, detail: r.detail, cleared, unlocked: true, idx: stages.length + 1 });
   }
   const clearedCount = stages.filter(s => s.cleared).length;
   const lvKey = store.getLevel(lang) || 'builder';

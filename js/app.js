@@ -371,12 +371,12 @@ function renderHome() {
 
 /* ---------- TRAIN = 도장깨기 정복 경로 ---------- */
 function renderTrain() {
-  // 자유 훈련(잠금 해제) 모드 — 설정에서 켤 수 있음
+  // 목록형 보기 — 설정에서 전환 가능(잠금은 어디에도 없음, 보기 방식만 다름)
   if (store.getSetting('freePlay')) {
     mount(view, h('div', { class: 'fade-in' },
-      h('h1', { class: 'h1' }, '훈련 · 자유 모드'),
-      h('p', { class: 'lead' }, '모든 드릴이 열려 있습니다. ',
-        h('a', { href: '#settings', class: 'plainlink', onClick: e => { e.preventDefault(); go('settings'); } }, '설정에서 도장깨기(순차 정복)로 되돌리기')),
+      h('h1', { class: 'h1' }, '훈련 · 전체 목록'),
+      h('p', { class: 'lead' }, '모든 드릴을 카탈로그로 봅니다. ',
+        h('a', { href: '#settings', class: 'plainlink', onClick: e => { e.preventDefault(); go('settings'); } }, '설정에서 정복 경로 보기로 되돌리기')),
       ...catalogBlocks()));
     return;
   }
@@ -389,7 +389,7 @@ function renderTrain() {
       h('div', null,
         h('div', { class: 'eyebrow' }, (lang === 'en' ? 'ENGLISH' : '中文') + ' · ' + levelOf(prog.level).label + ' 도장'),
         h('h1', { class: 'h1', style: { margin: 0 } }, '정복 경로'),
-        h('p', { class: 'small muted', style: { margin: '6px 0 0' } }, '위에서 아래로, 기준을 통과해야 다음 단계가 열립니다. 전부 정복하면 레벨 승급 — 최상급까지 깨면 완성.')),
+        h('p', { class: 'small muted', style: { margin: '6px 0 0' } }, '위에서 아래가 권장 순서 — 어느 단계든 바로 도전할 수 있고, 기준을 통과하면 도장이 찍힙니다. 전부 정복하면 레벨 승급 — 최상급까지 깨면 완성.')),
       h('div', { class: 'quest-head__score' },
         h('span', { class: 'quest-head__num' }, `${prog.clearedCount}`),
         h('span', { class: 'quest-head__den' }, `/ ${prog.total} 정복`))),
@@ -399,22 +399,23 @@ function renderTrain() {
   const stageCards = prog.stages.map((s, i) => {
     const d = DRILL_BY_ID[s.drillId];
     const isActive = i === activeIdx;
-    const state = s.cleared ? 'clear' : (s.unlocked ? 'active' : 'locked');
+    // 잠금 없음(2026-07-06): 순서는 권장 경로 표시일 뿐, 전 단계가 항상 도전 가능.
+    const state = s.cleared ? 'clear' : 'active';
     const pct = Math.round(Math.min(1, s.cur / s.goal) * 100);
     const isFinal = i === prog.stages.length - 1;
     return h('div', { class: `quest quest--${state}` + (isFinal ? ' quest--final' : '') },
       h('div', { class: 'quest__badge' },
-        s.cleared ? icon('check', { size: 16 }) : (s.unlocked ? String(s.idx) : icon('lock', { size: 15 }))),
+        s.cleared ? icon('check', { size: 16 }) : String(s.idx)),
       h('div', { class: 'quest__body' },
         h('div', { class: 'quest__top' },
           h('span', { class: 'iconchip quest__chip' }, icon(DRILL_ICON[s.drillId] || 'dot')),
           h('div', { class: 'quest__names' },
             h('div', { class: 'quest__name' }, (isFinal ? '최종 관문 · ' : '') + d.name),
             h('div', { class: 'quest__state' },
-              s.cleared ? '정복' : (s.unlocked ? (isActive ? '지금 도전' : '도전 가능') : '이전 단계를 정복하면 열립니다'))),
-          s.unlocked ? h('button', { class: 'btn ' + (isActive ? 'btn--primary' : ''), onClick: () => launch(d) }, s.cleared ? '다시' : '도전') : null),
+              s.cleared ? '정복' : (isActive ? '지금 도전' : '도전 가능'))),
+          h('button', { class: 'btn ' + (isActive ? 'btn--primary' : ''), onClick: () => launch(d) }, s.cleared ? '다시' : '도전')),
         h('div', { class: 'quest__gate' }, '기준: ' + s.gate),
-        !s.cleared && s.unlocked ? h('div', { class: 'quest__prog' },
+        !s.cleared ? h('div', { class: 'quest__prog' },
           h('div', { class: 'bar' }, h('div', { class: 'bar__fill', style: { width: pct + '%' } })),
           h('span', { class: 'quest__detail' }, s.detail)) : null,
         s.cleared ? h('div', { class: 'quest__detail quest__detail--clear' }, s.detail) : null));
@@ -428,7 +429,7 @@ function renderTrain() {
       finale = h('div', { class: 'hero', style: { marginTop: '16px' } },
         h('div', { class: 'hero__eyebrow' }, icon('level', { size: 15 }), '도장 정복'),
         h('div', { class: 'hero__name' }, `${levelOf(prog.level).label} 도장을 전부 깼습니다`),
-        h('div', { class: 'hero__goal' }, `다음 도장: ${next.label} (${next.sub[lang]}) — 더 어려운 지문에서 같은 경로를 다시 정복합니다. 읽기 단계(정독·전이·정복)는 새 난이도 기준으로 다시 잠깁니다.`),
+        h('div', { class: 'hero__goal' }, `다음 도장: ${next.label} (${next.sub[lang]}) — 더 어려운 지문에서 같은 경로를 다시 정복합니다. 읽기 단계(정독·전이·정복)의 도장은 새 난이도 기준으로 다시 비워집니다.`),
         h('button', { class: 'hero__cta', onClick: () => { if (confirm(`${next.label} 도장으로 승급할까요?`)) { store.setLevel(lang, prog.nextLevel); render(); } } }, icon('arrow'), `${next.label} 도장 입장`));
     } else {
       finale = h('div', { class: 'hero', style: { marginTop: '16px' } },
@@ -444,7 +445,7 @@ function renderTrain() {
     finale,
     h('div', { class: 'linkrow' },
       h('a', { href: '#theory', onClick: e => { e.preventDefault(); go('theory'); } }, icon('theory', { size: 16 }), '왜 이 순서인가 — 원리'),
-      h('a', { href: '#settings', onClick: e => { e.preventDefault(); go('settings'); } }, icon('gear', { size: 16 }), '자유 훈련으로 전환'))));
+      h('a', { href: '#settings', onClick: e => { e.preventDefault(); go('settings'); } }, icon('gear', { size: 16 }), '전체 드릴 목록 보기(설정)'))));
 }
 
 function launch(drill) {
@@ -883,7 +884,7 @@ function renderSettings() {
       h('h2', { class: 'h2' }, '훈련 방식'),
       h('label', { class: 'row', style: { gap: '10px', cursor: 'pointer' } },
         h('input', { type: 'checkbox', checked: !store.getSetting('freePlay'), onChange: e => { store.setSetting('freePlay', !e.target.checked); renderSettings(); } }),
-        h('span', null, '도장깨기 (순차 정복) ', h('span', { class: 'small muted' }, '— 기준을 통과해야 다음 훈련이 열립니다. 끄면 모든 드릴 자유 이용.'))),
+        h('span', null, '정복 경로 보기 ', h('span', { class: 'small muted' }, '— 권장 순서와 도장 진행을 한눈에 봅니다(잠금 없음, 어느 단계든 바로 도전). 끄면 전체 드릴 카탈로그로 표시.'))),
       h('p', { class: 'small muted', style: { marginTop: '8px' } }, '클리어는 "한 번 해봄"이 아니라 측정된 기준 통과로 판정되고, 기존 기록에서 자동 소급됩니다.')),
 
     h('div', { class: 'card' },

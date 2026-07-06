@@ -1,6 +1,6 @@
 // ===== service worker — offline app shell =====
 // 파일 추가/삭제/개명 시 반드시 ASSETS 동기화 + CACHE 버전 bump (addAll은 하나만 404여도 통째로 실패)
-const CACHE = 'readfast-v11';
+const CACHE = 'readfast-v12';
 const ASSETS = [
   './', './index.html', './css/styles.css',
   './js/app.js', './js/icons.js', './js/util.js', './js/store.js', './js/content.js', './js/theory.js', './js/levels.js', './js/progression.js',
