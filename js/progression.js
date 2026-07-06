@@ -128,16 +128,43 @@ const ORDER = {
   zh: ['vocab', 'zhchar', 'zhseg', 'sentence', 'err', 'repeated', 'conquer', 'context', 'modes', 'preview', 'retrieval', 'triage'],
 };
 
+// 도장 원장 키는 레벨별로 분리한다 — 읽기 단계(err·repeated·conquer 등)는 레벨을 올리면
+// 새 난이도에서 다시 깨야 하므로, 같은 stage라도 레벨이 다르면 다른 도장으로 본다.
+function clearKey(lang, stageKey) { return (store.getLevel(lang) || 'builder') + ':' + stageKey; }
+
+// 세션 기록에서 소급 파생한 '이번 판정' (durable 원장을 섞기 전 순수 판정값)
+function rawStageResult(lang, key) {
+  const p = STAGE_DEFS[key].check(lang);
+  return { ...p, sessionCleared: p.cur >= p.goal };
+}
+
+// 최초 1회: 지금 세션 기록으로 cleared로 판정되는 모든 단계를 durable 원장에 스냅샷.
+// 이후엔 append-only이므로 sessions[]가 FIFO로 밀려도 도장이 풀리지 않는다.
+// (A1 마이그레이션 — 구버전 데이터 무손실: 판정된 것만 기록, 삭제 없음)
+export function seedClears(lang) {
+  if (store.clearsSeeded(lang)) return;
+  for (const key of ORDER[lang]) {
+    const r = rawStageResult(lang, key);
+    if (r.sessionCleared) store.markCleared(lang, clearKey(lang, key));
+  }
+  store.markClearsSeeded(lang);
+}
+
 // path(lang) -> { stages: [{key, drillId, gate, cur, goal, detail, cleared, unlocked, idx}],
 //                clearedCount, total, conquered, nextLevel }
 export function path(lang) {
+  // 매 판정 시 최초 스냅샷을 보장 (boot에서 놓쳐도 안전) + 새 클리어 append
+  seedClears(lang);
   const stages = [];
   let prevCleared = true;
   for (const key of ORDER[lang]) {
     const def = STAGE_DEFS[key];
-    const p = def.check(lang);
-    const cleared = p.cur >= p.goal;
-    stages.push({ key, drillId: def.drillId, gate: def.gate, ...p, cleared, unlocked: prevCleared || cleared, idx: stages.length + 1 });
+    const r = rawStageResult(lang, key);
+    // 새로 세션 판정을 통과했으면 durable 원장에 append (한 번 깬 도장을 못박음)
+    if (r.sessionCleared) store.markCleared(lang, clearKey(lang, key));
+    // 클리어 = durable 원장에 있음 OR 이번 세션 판정 통과 (둘 중 하나면 클리어 — 도장 안 풀림)
+    const cleared = store.isCleared(lang, clearKey(lang, key)) || r.sessionCleared;
+    stages.push({ key, drillId: def.drillId, gate: def.gate, cur: r.cur, goal: r.goal, detail: r.detail, cleared, unlocked: prevCleared || cleared, idx: stages.length + 1 });
     prevCleared = prevCleared && cleared;
   }
   const clearedCount = stages.filter(s => s.cleared).length;

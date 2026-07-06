@@ -16,6 +16,7 @@ const DEFAULT = {
   rt: { en: {}, zh: {} }, // word-recognition latency samples per freq band
   hard: { en: {}, zh: {} }, // itemKey -> miss/slow count (재출제 가중치)
   sessions: [],      // {ts, drill, lang, ...}
+  clears: { en: {}, zh: {} }, // durable 도장 원장: stageKey -> {at:ISO} (append-only, sessions FIFO에 안 밀림)
   streak: { count: 0, last: null, freezes: 2 },
   seen: {},          // passageId -> count (avoid repeats / mark used)
   myTexts: [],       // user-imported texts
@@ -91,6 +92,20 @@ export function errSeries(lang, mode) {
 }
 export function ceiling(lang, tier) { return state.prof[lang].ceiling[tier] || null; }
 
+// (A5) 이해도 판정 평활: 게이트(ERR 0점 60%)·승급(90%) 판정에만 쓰는 파생값.
+// 해당 티어 최근 3회(방금 값 포함) full-mode comp의 이동평균. 첫 1-2회는 원값 그대로.
+// prof.err 스키마는 그대로 — 저장하지 않고 계산만 한다(표시는 항상 원값 유지).
+export function smoothedComp(lang, tier, currentComp) {
+  const prior = state.prof[lang].err
+    .filter(r => r.mode === 'full' && r.tier === tier)
+    .slice(-2)                       // 직전 2회 (이번 것은 아직 addErr 전이므로 별도로 합친다)
+    .map(r => r.comp);
+  const window = prior.concat([currentComp]);
+  if (window.length < 3) return currentComp;   // 첫 1-2회는 원값
+  const avg = window.reduce((s, x) => s + x, 0) / window.length;
+  return avg;
+}
+
 /* ---- adaptive pace staircase (comprehension-gated, smoothed) ---- */
 // 시작 페이스는 레벨 프로필에서 파생 — 초급자가 200 WPM에서 연속 실패로 시작하지 않게.
 function basePace(lang) {
@@ -138,6 +153,17 @@ export function srDueList(deck, keys) {
 }
 // 덱에 이미 기록된 키 전부(예: 정복 모드에서 표시한 미지 단어 큐)
 export function srKeys(deck) { return Object.keys(state.sr[deck] || {}); }
+// (A3) 복귀 훅: 오늘 잊히기 전 복습해야 할 어휘 카드 수 — vocab 덱 + conquer 표시 단어 덱 합산.
+// reps>0(이미 학습됨) & due<=now 만 카운트. 홈 배지에서 재사용.
+export function dueCardCount(lang) {
+  const t = now();
+  let total = 0;
+  for (const deck of ['vocab-' + lang, 'conquer-vocab-' + lang]) {
+    const d = state.sr[deck] || {};
+    for (const k of Object.keys(d)) { const c = d[k]; if (c && c.reps > 0 && c.due <= t) total++; }
+  }
+  return total;
+}
 export function srNewCount(deck, keys) {
   const d = state.sr[deck] || {};
   return keys.filter(k => !d[k] || d[k].reps === 0).length;
@@ -205,6 +231,29 @@ export function touchStreak() {
 export function sessionsToday() {
   const tk = todayKey();
   return state.sessions.filter(x => new Date(x.ts).toISOString().slice(0, 10) === tk);
+}
+
+/* ---- durable 도장 클리어 원장 (A1) ---- */
+// clears는 append-only: 한 번 기록된 stage 클리어는 sessions[] FIFO에 밀려도 유지된다.
+// deepDefaults가 구버전 데이터에 clears:{en:{},zh:{}}를 자동 보강하므로 로드는 안전.
+export function clearsFor(lang) { return (state.clears && state.clears[lang]) || {}; }
+export function isCleared(lang, stageKey) { return !!(state.clears && state.clears[lang] && state.clears[lang][stageKey]); }
+// 새 클리어 기록 (이미 있으면 최초 시각 보존 — 삭제·덮어쓰기 없음)
+export function markCleared(lang, stageKey) {
+  if (!state.clears) state.clears = { en: {}, zh: {} };
+  if (!state.clears[lang]) state.clears[lang] = {};
+  if (state.clears[lang][stageKey]) return false;
+  state.clears[lang][stageKey] = { at: new Date().toISOString() };
+  save();
+  return true;
+}
+// 최초 1회 스냅샷 여부 판정용: 이 언어의 clears가 아직 스냅샷된 적 없는지
+// (원장에 __seeded 마커가 없으면 '아직 마이그레이션 전')
+export function clearsSeeded(lang) { return !!(state.clears && state.clears[lang] && state.clears[lang].__seeded); }
+export function markClearsSeeded(lang) {
+  if (!state.clears) state.clears = { en: {}, zh: {} };
+  if (!state.clears[lang]) state.clears[lang] = {};
+  if (!state.clears[lang].__seeded) { state.clears[lang].__seeded = { at: new Date().toISOString() }; save(); }
 }
 
 /* ---- passage seen tracking ---- */

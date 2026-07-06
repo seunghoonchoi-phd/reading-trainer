@@ -11,7 +11,8 @@ import { drillHeader, resultCard, tierPicker, tierLabel, setTeardown } from './s
 const STOP_EN = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'of', 'to', 'in', 'on', 'at', 'for', 'with', 'as', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'it', 'its', 'this', 'that', 'these', 'those', 'he', 'she', 'they', 'we', 'you', 'i', 'his', 'her', 'their', 'our', 'your', 'from', 'not', 'no', 'so', 'if', 'than', 'then', 'there', 'here', 'which', 'who', 'what', 'when', 'where', 'how', 'will', 'would', 'can', 'could', 'may', 'might', 'do', 'does', 'did', 'have', 'has', 'had']);
 
 // 문장 하나를 지문 내 다른 실질어로 변조. 실패 시 null.
-function tamper(sent, text, lang) {
+// export: 내 글 SVT(A6)에서 재사용 — 변조는 내용어(실질어) 치환, 정답이 원문으로 결정돼 채점 정직.
+export function tamper(sent, text, lang) {
   if (lang === 'zh') {
     const chars = Array.from(sent).filter(c => /[㐀-鿿]/.test(c));
     if (chars.length < 5) return null;

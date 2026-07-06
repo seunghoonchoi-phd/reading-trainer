@@ -1,14 +1,15 @@
 // ===== app.js — entry, router, views =====
-import { h, mount, $, $$, clear, countUnits, startTimer, fmtClock, sparkline, mean, median, clamp } from './util.js';
+import { h, mount, $, $$, clear, countUnits, startTimer, fmtClock, sparkline, mean, median, clamp, shuffle } from './util.js';
 import * as store from './store.js';
 import * as content from './content.js';
 import { LEVELS, LEVEL_ORDER, levelOf, defaultTier, recommendLevel } from './levels.js';
-import { path as progressionPath } from './progression.js';
+import { path as progressionPath, seedClears } from './progression.js';
 import { DRILLS, TRACKS, DRILL_BY_ID } from './drills/index.js';
 import { renderTheory } from './theory.js';
 import { compQuiz, setTeardown, runTeardown } from './drills/shared.js';
 import triage from './drills/triage.js';
 import conquer from './drills/conquer.js';
+import { tamper } from './drills/sentence.js';
 import { icon, iconSvg, DRILL_ICON } from './icons.js';
 
 const view = $('#view');
@@ -30,10 +31,18 @@ function resolveTheme() {
   if (t === 'light' || t === 'dark') return t;                                  // explicit choice
   return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
 }
+function paintThemeToggle(t) {
+  const btn = $('#themeToggle');
+  if (!btn) return;
+  // 현재 테마를 나타내는 아이콘 (다크면 달, 라이트면 해) — 아이콘 시스템(js/icons.js)으로 통일
+  btn.innerHTML = iconSvg(t === 'dark' ? 'moon' : 'sun');
+  btn.setAttribute('title', t === 'dark' ? '밝게 전환' : '어둡게 전환');
+}
 function applyTheme() {
   const t = resolveTheme();
   document.documentElement.setAttribute('data-theme', t);
   document.querySelector('meta[name=theme-color]')?.setAttribute('content', t === 'dark' ? '#14181d' : '#FCFBF9');
+  paintThemeToggle(t);
 }
 $('#themeToggle').addEventListener('click', () => {
   store.setSetting('theme', (resolveTheme() === 'dark') ? 'light' : 'dark');
@@ -126,7 +135,27 @@ function catalogBlocks() {
 function sessionDoneToday(drillId) {
   return store.sessionsToday().some(s => s.drill === drillId || s.drill.startsWith(drillId + '-'));
 }
-// 오늘의 코스: 도장깨기 경로에서 파생 — 워밍업(커버리지) → 지금 도전 단계 → 정복한 드릴 유지 로테이션.
+// 레이더 최약축 → 처방 드릴 매핑 (A2). 현재 레벨에서 열린(unlocked) 드릴만 후보.
+// 어휘→vocab / 속도→err / 이해→err·context / 유지·전이→repeated / 전략→modes·preview·triage
+const WEAKNESS_DRILLS = {
+  '어휘': ['vocab'],
+  '속도': ['err'],
+  '이해': ['err', 'context'],
+  '유지·전이': ['repeated'],
+  '전략': ['modes', 'preview', 'triage', 'retrieval'],
+};
+// 최약축에 대응하며 지금 열려 있고 이 언어에 유효한 드릴 하나를 고른다. 없으면 null.
+function weaknessDrillFor(lng, unlockedIds) {
+  const valid = id => DRILL_BY_ID[id] && DRILL_BY_ID[id].langs.includes(lng);
+  const skills = skillProfile(lng);
+  if (skills.every(s => s.val === 0)) return null; // 데이터 없으면 처방 없음
+  const weakest = skills.slice().sort((a, b) => a.val - b.val)[0];
+  const cands = (WEAKNESS_DRILLS[weakest.name] || []).filter(id => unlockedIds.includes(id) && valid(id));
+  return cands.length ? { drill: cands[0], axis: weakest.name } : null;
+}
+
+// 오늘의 코스: 도장깨기 경로에서 파생 — 워밍업(커버리지) → 지금 도전 단계 → 약점축 처방.
+// 반환: { ids:[...], weakness:{drill,axis}|null }  (weakness.drill이 코스에 실제로 들어갔을 때만 라벨 표시)
 function pickSession(lng) {
   const valid = id => DRILL_BY_ID[id] && DRILL_BY_ID[id].langs.includes(lng);
   const prog = progressionPath(lng);
@@ -137,7 +166,10 @@ function pickSession(lng) {
   if (unlocked.includes('vocab')) out.push('vocab');
   // 2) 도전 — 지금 깨야 할 단계
   if (active && valid(active.drillId)) out.push(active.drillId);
-  // 3) 유지 — 이미 정복한 드릴을 날짜 로테이션 (실력 유지·간격 복습)
+  // 3) 약점 보강 (A2) — 레이더 최약축에 대응하는 열린 드릴 1칸. 레이더 '집중' 라벨이 실제 처방으로 이어지게.
+  const weakness = weaknessDrillFor(lng, unlocked);
+  if (weakness) out.push(weakness.drill);
+  // 4) 유지 — 이미 정복한 드릴을 날짜 로테이션 (실력 유지·간격 복습)
   const cleared = prog.stages.filter(s => s.cleared && s.drillId !== 'vocab').map(s => s.drillId).filter(valid);
   if (cleared.length) out.push(cleared[new Date().getDate() % cleared.length]);
   // 전부 정복(완성) 상태 — 코어·전략 다양성 로테이션으로 유지 훈련
@@ -147,7 +179,10 @@ function pickSession(lng) {
     const strat = ['retrieval', 'modes', 'preview', 'triage'].filter(valid);
     if (strat.length) out.push(strat[(new Date().getDate() + 1) % strat.length]);
   }
-  return [...new Set(out)].slice(0, 3);
+  const ids = [...new Set(out)].slice(0, 3);
+  // 약점 드릴이 최종 3칸 안에 실제로 남았을 때만 라벨링
+  const weaknessFinal = weakness && ids.includes(weakness.drill) ? weakness : null;
+  return { ids, weakness: weaknessFinal };
 }
 
 function goalRing(done, goal) {
@@ -182,10 +217,11 @@ function renderOnboarding() {
         (lang === 'zh' ? '중국어' : '영어') + ' 읽기, 지금 어느 정도인가요?'),
       h('div', { class: 'hero__goal' }, '레벨에 맞춰 지문 난이도·훈련 속도·어휘가 정해집니다. 언제든 설정에서 바꿀 수 있고, 훈련하다 보면 앱이 레벨 올리기를 제안합니다.')),
     h('div', { class: 'levelgrid' }, ...cards),
-    h('div', { class: 'card', style: { marginTop: '14px' } },
+    h('div', { class: 'card card--recommend', style: { marginTop: '14px' } },
+      h('p', { class: 'eyebrow eyebrow--latin' }, 'RECOMMENDED'),
       h('div', { class: 'row spread' },
         h('div', null,
-          h('b', null, '잘 모르겠어요'),
+          h('b', null, '잘 모르겠어요 — 3분 수준 측정으로 정확히'),
           h('div', { class: 'small muted' }, '짧은 지문 하나를 읽고 이해 문제를 풀면, 결과로 레벨을 추천해 드립니다 (약 3분).')),
         h('button', { class: 'btn btn--primary', onClick: placement }, '수준 측정')),
       h('p', { class: 'small muted', style: { marginTop: '10px' } },
@@ -262,7 +298,18 @@ function renderHome() {
     h('button', { class: 'level-pill', title: '레벨 바꾸기 (설정)', onClick: () => go('settings') },
       icon('level', { size: 14 }), lv.label));
 
-  const session = pickSession(lang);
+  // A3 복귀 훅: 오늘 복습할 어휘 카드 배지 (0이면 숨김) — 클릭 시 어휘 드릴 진입
+  const dueN = store.dueCardCount(lang);
+  const dueBadge = dueN > 0
+    ? h('button', { class: 'due-badge', title: '잊히기 전에 복습하세요 — 어휘 카드로 이동', onClick: () => launch(DRILL_BY_ID['vocab']) },
+        icon('cards', { size: 16 }),
+        h('span', { class: 'due-badge__txt' }, '오늘 복습할 어휘 카드 ', h('b', null, String(dueN)), '장'),
+        icon('chevron', { size: 15, cls: 'due-badge__chev' }))
+    : null;
+
+  const picked = pickSession(lang);
+  const session = picked.ids;
+  const weakness = picked.weakness; // {drill, axis} | null
   const doneFlags = session.map(sessionDoneToday);
   let activeIdx = doneFlags.findIndex(d => !d);
   const allDone = activeIdx === -1;
@@ -296,17 +343,21 @@ function renderHome() {
 
   const steps = session.map((id, i) => {
     const d = DRILL_BY_ID[id]; const done = doneFlags[i];
+    const isWeak = weakness && weakness.drill === id;
     const cls = 'step' + (done ? ' step--done' : (hasBaseline && i === activeIdx ? ' step--active' : ''));
     return h('button', { class: cls, onClick: () => launch(d) },
       h('span', { class: 'step__num' }, done ? icon('check', { size: 15 }) : String(i + 1)),
       h('div', { class: 'step__body' },
-        h('div', { class: 'step__name' }, d.name),
+        h('div', { class: 'step__name' },
+          d.name,
+          isWeak ? h('span', { class: 'step__tag' }, icon('target', { size: 12 }), '약점 보강: ' + weakness.axis) : null),
         h('div', { class: 'step__meta' }, done ? '완료' : d.track)),
       icon('chevron', { size: 18, cls: 'step__chev' }));
   });
 
   mount(view, h('div', { class: 'fade-in' },
     status,
+    dueBadge,
     h('p', { class: 'track-label', style: { marginTop: '16px' } }, hasBaseline ? '오늘의 훈련' : '먼저 · 기준선'),
     heroNode,
     !hasBaseline ? h('p', { class: 'track-label' }, '측정 후 · 오늘의 코스') : null,
@@ -427,6 +478,7 @@ function renderMyTexts() {
     h('div', { class: 'btnrow', style: { marginTop: '10px' } },
       h('button', { class: 'btn btn--primary', onClick: () => { clear(view); drillActive = true; conquer.render(view, t.lang, backToTexts, t); } }, '정복 모드'),
       h('button', { class: 'btn', onClick: () => runCustomERR(t) }, '정독(ERR)'),
+      h('button', { class: 'btn', onClick: () => runCustomSVT(t) }, '문장 검증(SVT)'),
       h('button', { class: 'btn', onClick: () => { clear(view); drillActive = true; triage.render(view, t.lang, backToTexts, t); } }, '논문 3-패스'),
       h('button', { class: 'btn btn--ghost', onClick: () => runCustomRecall(t) }, '자기설명·인출'))))
     : [h('div', { class: 'empty' }, '저장한 글이 없습니다. 위에 붙여넣어 보세요.')];
@@ -481,6 +533,78 @@ function runCustomERR(t) {
       h('span', { class: 'chip' }, `${units}${t.lang === 'zh' ? '자' : '단어'}`), timerEl),
     h('div', { class: 'card' }, h('div', { class: 'eyebrow' }, t.title), h('div', { class: 'reader', lang: t.lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': t.lang }, h('div', { class: 'reader-wrap' }, t.text))),
     h('div', { class: 'btnrow', style: { marginTop: '12px' } }, h('button', { class: 'btn btn--primary btn--lg', onClick: done }, '다 읽음 → 이해 확인')));
+}
+
+// A6: 내 글 문장 검증(SVT) — 붙여넣은 텍스트에서 원문/1단어 변조 판정 문항을 자동 생성.
+// sentence.js의 tamper(내용어 치환)를 재사용해 정답이 원문으로 결정 → 자동 클로즈보다 정직한 채점 경로.
+function runCustomSVT(t) {
+  clear(view); window.scrollTo(0, 0);
+  drillActive = true;
+  const L = t.lang;
+  const sents = content.splitSentences(t.text, L).filter(s => countUnits(s, L) >= (L === 'zh' ? 8 : 6));
+  if (sents.length < 4) {
+    drillActive = false;
+    mount(view,
+      h('div', { class: 'hud' }, h('button', { class: 'iconbtn', onClick: backToTexts }, '‹'), h('span', { class: 'chip' }, '문장 검증(SVT)')),
+      h('div', { class: 'card' }, h('div', { class: 'note note--warn' }, '이 글은 문장이 너무 적거나 짧아 문장 검증 문항을 만들 수 없습니다. 조금 더 긴 단락으로 시도해 보세요.'),
+        h('div', { class: 'btnrow', style: { justifyContent: 'center', marginTop: '12px' } }, h('button', { class: 'btn btn--ghost', onClick: backToTexts }, '내 글로'))));
+    return;
+  }
+  const chosen = shuffle(sents).slice(0, 6);
+  // 절반은 원문, 절반은 1단어 변조. 변조 실패한 문장은 원문으로 대체(정직).
+  const trials = shuffle(chosen.map((s, i) => {
+    if (i % 2 === 0) return { text: s, real: true };
+    const bad = tamper(s, t.text, L);
+    return bad ? { text: bad, real: false } : { text: s, real: true };
+  }));
+
+  const read = () => mount(view,
+    h('div', { class: 'hud' }, h('button', { class: 'iconbtn', onClick: backToTexts }, '‹'), h('span', { class: 'chip' }, '문장 검증(SVT) · 1/2 지문 읽기')),
+    h('div', { class: 'note small' }, '평소처럼 읽으세요. 다음 단계에서 이 글의 문장들을 ', h('b', null, '원문 그대로'), '인지 ', h('b', null, '한 단어가 바뀌었'), '는지 판정합니다.'),
+    h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'eyebrow' }, t.title),
+      h('div', { class: 'reader', lang: L === 'zh' ? 'zh-Hans' : 'en', 'data-lang': L }, h('div', { class: 'reader-wrap' }, t.text))),
+    h('div', { class: 'btnrow', style: { marginTop: '12px' } },
+      h('button', { class: 'btn btn--primary btn--lg', onClick: () => trial(0, [], []) }, '다 읽음 → 문장 검증')));
+
+  const trial = (i, results, rts) => {
+    if (i >= trials.length) return finish(results, rts);
+    const tr = trials[i];
+    const stim = h('div', { class: 'reader', lang: L === 'zh' ? 'zh-Hans' : 'en', 'data-lang': L, style: { textAlign: 'center', padding: '18px 6px' } }, tr.text);
+    let t0 = 0, shown = false;
+    setTimeout(() => { t0 = performance.now(); shown = true; }, 250);
+    const answer = (saidReal) => {
+      if (!shown) return;
+      results.push(saidReal === tr.real); rts.push(performance.now() - t0);
+      trial(i + 1, results, rts);
+    };
+    mount(view,
+      h('div', { class: 'hud' }, h('button', { class: 'iconbtn', onClick: backToTexts }, '‹'), h('span', { class: 'chip' }, '의미로 판단 — 표면 훑기로는 안 잡힙니다'), h('span', { class: 'chip' }, `${i + 1} / ${trials.length}`)),
+      h('div', { class: 'card' }, stim),
+      h('div', { class: 'btnrow', style: { justifyContent: 'center', marginTop: '12px' } },
+        h('button', { class: 'btn btn--primary btn--lg', onClick: () => answer(true) }, '지문 그대로 ✓'),
+        h('button', { class: 'btn btn--lg', onClick: () => answer(false) }, '바뀌었음 ✕')));
+  };
+
+  const finish = (results, rts) => {
+    drillActive = false;
+    const correct = results.filter(Boolean).length;
+    const acc = results.length ? correct / results.length : 0;
+    const med = rts.length ? Math.round(median(rts)) : 0;
+    store.logSession({ drill: 'mytext-svt', lang: L, acc, rt: med });
+    mount(view, h('div', { class: 'card fade-in center' },
+      h('p', { class: 'eyebrow' }, '문장 검증 결과'),
+      h('div', { class: 'stat-row', style: { justifyContent: 'center' } },
+        h('div', { class: 'stat', style: { alignItems: 'center' } }, h('span', { class: 'stat__num' }, correct + '/' + results.length), h('span', { class: 'stat__lbl' }, '정확 (원문 결정)')),
+        h('div', { class: 'stat', style: { alignItems: 'center' } }, h('span', { class: 'stat__num' }, (med / 1000).toFixed(1) + 's'), h('span', { class: 'stat__lbl' }, '문장당 중앙 판정시간'))),
+      h('div', { class: 'note ' + (acc >= 5 / 6 ? 'note--good' : 'note--warn'), style: { textAlign: 'left', marginTop: '8px' } }, acc >= 5 / 6
+        ? '문장을 의미로 통합하고 있습니다. 자동 빈칸 문제와 달리 정답이 원문으로 결정되므로 이 점수는 정직합니다.'
+        : '표면(단어 나열)이 아니라 의미로 기억해야 잡힙니다. 이 채점은 원문 대조라 검증된 문항입니다.'),
+      h('div', { class: 'btnrow', style: { justifyContent: 'center', marginTop: '12px' } },
+        h('button', { class: 'btn btn--primary', onClick: () => runCustomSVT(t) }, '다시'),
+        h('button', { class: 'btn btn--ghost', onClick: backToTexts }, '내 글로'))));
+  };
+
+  read();
 }
 
 function runCustomRecall(t) {
@@ -577,6 +701,44 @@ function renderRadar(skills) {
   return svg;
 }
 
+/* ---------- growth trend + plateau (A4) ---------- */
+// ISO 주(월요일 시작) 버킷 키 — 날짜축 눈금용
+function weekKey(ts) {
+  const d = new Date(ts);
+  const day = (d.getDay() + 6) % 7; // Mon=0
+  const monday = new Date(d); monday.setDate(d.getDate() - day); monday.setHours(0, 0, 0, 0);
+  return monday.getTime();
+}
+// 주간 평균 ERR 버킷 [{wk, avg, label}] — 시간축 정렬
+function weeklyBuckets(rows) {
+  const map = new Map();
+  rows.forEach(r => { if (!map.has(weekKey(r.ts))) map.set(weekKey(r.ts), []); map.get(weekKey(r.ts)).push(r.err); });
+  return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([wk, arr]) => {
+    const d = new Date(wk);
+    return { wk, avg: arr.reduce((s, x) => s + x, 0) / arr.length, label: `${d.getMonth() + 1}/${d.getDate()}` };
+  });
+}
+// 지난주 대비 변화율(%) — 최근 2주 버킷 평균 비교. 데이터 부족이면 null.
+function weekOverWeek(rows) {
+  const b = weeklyBuckets(rows);
+  if (b.length < 2) return null;
+  const prev = b[b.length - 2].avg, cur = b[b.length - 1].avg;
+  if (prev <= 0) return null;
+  return Math.round((cur - prev) / prev * 100);
+}
+// 정체 감지: 최근 5개 전이 ERR의 연속 기울기(변화율)가 전부 ±3% 이내면 true. 데이터<5면 false.
+function isPlateau(errVals) {
+  if (errVals.length < 5) return false;
+  const last5 = errVals.slice(-5);
+  for (let i = 1; i < last5.length; i++) {
+    const base = last5[i - 1];
+    if (base <= 0) return false;
+    const pct = Math.abs((last5[i] - base) / base) * 100;
+    if (pct > 3) return false;
+  }
+  return true;
+}
+
 /* ---------- PROGRESS ---------- */
 function renderProgress() {
   const full = store.errSeries(lang, 'full');
@@ -617,13 +779,35 @@ function renderProgress() {
         ? '아직 데이터가 없습니다. 오늘의 훈련을 시작하면 다섯 축이 채워지고, 가장 짧은 축이 다음 집중 영역이 됩니다.'
         : '검증된 절대점수가 아니라 활동·이해 기록에서 추정한 상대 프로필입니다. 가장 짧은 축이 다음에 집중할 영역입니다.')),
 
-    h('div', { class: 'card' },
-      h('h2', { class: 'h2' }, 'ERR 추이 (유효 읽기속도 = 속도 × 이해율)'),
-      fullErr.length > 1 ? sparkline(fullErr, 340, 64) : h('p', { class: 'muted small' }, 'ERR 정독을 몇 번 하면 추이가 그려집니다.'),
-      h('div', { class: 'stat-row', style: { marginTop: '12px' } },
-        stat(fullErr.length ? Math.round(fullErr[fullErr.length - 1]) : '—', '최근 ERR'),
-        stat(fullErr.length ? Math.round(Math.max(...fullErr)) : '—', '최고 ERR'),
-        stat(transfer.length ? Math.round(transfer[transfer.length - 1].err) : '—', '전이 ERR', '새 지문 기준'))),
+    (() => {
+      // A4: 시간축 눈금 + '지난주 대비' + 정체 배지. 전이 ERR 우선, 데이터 부족 시 정독 ERR로 폴백.
+      const trendRows = transfer.length >= 2 ? transfer : full;
+      const trendLabel = trendRows === transfer && transfer.length >= 2 ? '전이' : '정독';
+      const wow = weekOverWeek(trendRows);
+      const buckets = weeklyBuckets(trendRows);
+      const transferErr = transfer.map(r => r.err);
+      const plateau = isPlateau(transferErr);
+      const wowNode = wow != null
+        ? h('div', { class: 'trend-line' + (wow >= 0 ? ' trend-line--up' : ' trend-line--down') },
+            icon(wow >= 0 ? 'progress' : 'arrow', { size: 15 }),
+            h('span', null, '지난주 대비 ', h('b', null, (wow >= 0 ? '+' : '') + wow + '%'),
+              h('span', { class: 'small muted' }, ' · ' + trendLabel + ' ERR')))
+        : null;
+      const ticks = buckets.length > 1
+        ? h('div', { class: 'week-ticks' }, ...buckets.map(b => h('span', { class: 'week-tick' }, b.label)))
+        : null;
+      return h('div', { class: 'card' },
+        h('div', { class: 'row spread', style: { alignItems: 'center', marginBottom: '4px' } },
+          h('h2', { class: 'h2', style: { margin: 0 } }, 'ERR 추이 (유효 읽기속도 = 속도 × 이해율)'),
+          plateau ? h('span', { class: 'stall-badge', title: '최근 전이 ERR이 5회 연속 평평합니다' }, icon('target', { size: 13 }), '정체 — 커버리지·난이도 점검') : null),
+        fullErr.length > 1 ? sparkline(fullErr, 340, 64) : h('p', { class: 'muted small' }, 'ERR 정독을 몇 번 하면 추이가 그려집니다.'),
+        ticks,
+        wowNode,
+        h('div', { class: 'stat-row', style: { marginTop: '12px' } },
+          stat(fullErr.length ? Math.round(fullErr[fullErr.length - 1]) : '—', '최근 ERR'),
+          stat(fullErr.length ? Math.round(Math.max(...fullErr)) : '—', '최고 ERR'),
+          stat(transfer.length ? Math.round(transfer[transfer.length - 1].err) : '—', '전이 ERR', '새 지문 기준')));
+    })(),
 
     h('div', { class: 'card' },
       h('h2', { class: 'h2' }, '이해도 — 정독 vs 훑기 (분리)'),
@@ -750,6 +934,8 @@ async function boot() {
   syncTabs();
   view.innerHTML = '<div class="empty">콘텐츠 불러오는 중…</div>';
   await content.loadContent();
+  // A1: 두 언어 모두 도장 클리어를 최초 1회 durable 원장에 스냅샷 (세션 FIFO에도 도장 유지)
+  try { seedClears('en'); seedClears('zh'); } catch {}
   render();
   // register service worker
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

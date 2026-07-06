@@ -42,6 +42,9 @@ export const ICONS = {
   install:   SVG('<path d="M12 3.5v11M8 10.5l4 4 4-4"/><path d="M4.5 16.5v2.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2.5"/>'),
   brand:     SVG('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3"/>', 2), // reticle — 초점(정독)의 시각화, icon.svg와 동일 모티프
   level:     SVG('<path d="M4 20v-5M9.3 20v-9M14.6 20V7M20 20V3.8"/>', 2.2), // ascending bars — 레벨
+  target:    SVG('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>'), // 과녁 — 집중/약점 처방
+  sun:       SVG('<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M4.6 4.6l1.85 1.85M17.55 17.55l1.85 1.85M2.5 12h2.6M18.9 12h2.6M4.6 19.4l1.85-1.85M17.55 6.45l1.85-1.85"/>', 1.9), // 밝게(라이트 테마)
+  moon:      SVG('<path d="M20 14.5A8.2 8.2 0 0 1 9.5 4 8.2 8.2 0 1 0 20 14.5Z"/>'), // 어둡게(다크 테마)
 };
 
 // drill id -> icon name (ids already match ICONS keys, but keep an explicit map for safety)

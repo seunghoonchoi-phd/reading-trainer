@@ -105,19 +105,21 @@ export default {
     };
 
     const done = (p, units, wpm, comp) => {
-      const floored = comp < 0.6;
-      const err = floored ? 0 : Math.round(wpm * comp);
+      // (A5) 게이트·승급 판정에만 최근 3회 이동평균 comp를 쓴다. 표시·기록·ERR 계산은 원값(comp) 유지.
+      const gateComp = store.smoothedComp(lang, tier, comp);
+      const floored = gateComp < 0.6;             // ERR 0점 게이트 = 평활된 이해도로 판정 (한 번의 찍기로 0점 안 됨)
+      const err = floored ? 0 : Math.round(wpm * comp); // 게이트 통과 시 ERR = 속도 × 원값 이해도 (표시는 원값)
       const isBaseline = store.errSeries(lang, 'full').length === 0;
-      if (isBaseline && !floored) store.seedPace(lang, tier, wpm); // 기준선 실측으로 페이서 시작점 보정
+      if (isBaseline && comp >= 0.6) store.seedPace(lang, tier, wpm); // 기준선 실측으로 페이서 시작점 보정
       const upd = store.updatePace(lang, tier, comp);
       store.addErr(lang, { tier, units, wpm: Math.round(wpm), comp, err, mode: 'full' });
       store.logSession({ drill: 'err', lang, tier, err, wpm: Math.round(wpm), comp });
       const ceil = store.ceiling(lang, tier);
       const dirMsg = { up: '이해가 잘 유지돼 다음엔 페이스를 올립니다 ▲', down: '이해가 떨어져 페이스를 낮춥니다 ▼', hold: '페이스 유지 ―' }[upd.dir];
-      // 레벨 창 최상단에서 이해 90%+ 반복이면 레벨 올리기 제안
+      // 레벨 창 최상단에서 이해 90%+ 반복이면 레벨 올리기 제안 (승급 판정도 평활된 이해도로)
       const lvKey = store.getLevel(lang) || 'builder';
       const win = levelOf(lvKey).tiers;
-      const canLevelUp = lvKey !== 'overload' && tier >= win[win.length - 1] && comp >= 0.9;
+      const canLevelUp = lvKey !== 'overload' && tier >= win[win.length - 1] && gateComp >= 0.9;
       const nextLv = canLevelUp ? levelOf(LEVEL_ORDER[LEVEL_ORDER.indexOf(lvKey) + 1]) : null;
       const extra = h('div', { class: 'stack' },
         floored ? h('div', { class: 'note note--warn' }, '이해도 60% 미만 → ERR 0점. 훑기는 정독 점수를 이길 수 없습니다. 조금 더 천천히, 정확하게. 난이도를 한 단계 낮추는 것도 방법입니다.') : null,
