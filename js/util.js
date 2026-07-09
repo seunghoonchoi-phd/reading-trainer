@@ -1,4 +1,4 @@
-// ===== util.js — DOM helpers, timing, math =====
+// ===== util.js: DOM helpers, timing, math =====
 
 export function h(tag, attrs, ...kids) {
   const e = document.createElement(tag);
@@ -65,23 +65,144 @@ export function fmtDate(ts) {
   const d = new Date(ts);
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
-export const todayKey = () => new Date().toISOString().slice(0, 10);
+// Local calendar day. Using toISOString() moves late-night sessions to the next day in UTC-based zones.
+export function todayKey(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 export const now = () => Date.now();
 
-// running timer that calls onTick(ms) ~10x/s; returns { stop() -> elapsedMs }
-export function startTimer(onTick) {
-  const t0 = performance.now();
-  let raf, stopped = false;
-  const loop = () => {
-    if (stopped) return;
-    onTick && onTick(performance.now() - t0);
-    raf = requestAnimationFrame(loop);
+const perfNow = () => globalThis.performance?.now?.() ?? Date.now();
+const requestFrame = callback => (
+  typeof globalThis.requestAnimationFrame === 'function'
+    ? globalThis.requestAnimationFrame(callback)
+    : globalThis.setTimeout(() => callback(perfNow()), 16)
+);
+const cancelFrame = handle => {
+  if (handle == null) return;
+  if (typeof globalThis.cancelAnimationFrame === 'function') globalThis.cancelAnimationFrame(handle);
+  else globalThis.clearTimeout(handle);
+};
+
+// Pausable timer. Paused time is excluded from elapsed(), and AbortSignal stops every pending tick.
+export function createTimer(onTick, options = {}) {
+  const { signal, tickMs = 100, autoStart = true } = options;
+  let accumulated = 0;
+  let startedAt = null;
+  let frame = null;
+  let lastTickAt = -Infinity;
+  let paused = !autoStart;
+  let stopped = false;
+
+  const elapsedAt = (timestamp = perfNow()) => (
+    accumulated + (!paused && !stopped && startedAt != null ? timestamp - startedAt : 0)
+  );
+
+  const emit = (timestamp, force = false) => {
+    if (typeof onTick !== 'function') return;
+    if (force || timestamp - lastTickAt >= tickMs) {
+      lastTickAt = timestamp;
+      onTick(elapsedAt(timestamp));
+    }
   };
-  raf = requestAnimationFrame(loop);
-  return {
-    stop() { stopped = true; cancelAnimationFrame(raf); return performance.now() - t0; },
-    elapsed() { return performance.now() - t0; },
+
+  const loop = timestamp => {
+    if (stopped || paused) return;
+    emit(timestamp);
+    frame = requestFrame(loop);
   };
+
+  const pause = () => {
+    if (stopped || paused) return accumulated;
+    const timestamp = perfNow();
+    accumulated = elapsedAt(timestamp);
+    startedAt = null;
+    paused = true;
+    cancelFrame(frame);
+    frame = null;
+    emit(timestamp, true);
+    return accumulated;
+  };
+
+  const resume = () => {
+    if (stopped || !paused) return elapsedAt();
+    paused = false;
+    startedAt = perfNow();
+    lastTickAt = -Infinity;
+    emit(startedAt, true);
+    frame = requestFrame(loop);
+    return accumulated;
+  };
+
+  const stop = () => {
+    if (stopped) return accumulated;
+    if (!paused) accumulated = elapsedAt();
+    stopped = true;
+    paused = false;
+    startedAt = null;
+    cancelFrame(frame);
+    frame = null;
+    signal?.removeEventListener?.('abort', stop);
+    if (typeof onTick === 'function') onTick(accumulated);
+    return accumulated;
+  };
+
+  const api = {
+    pause,
+    resume,
+    stop,
+    elapsed: () => elapsedAt(),
+    isPaused: () => paused,
+    isStopped: () => stopped,
+  };
+
+  if (signal?.aborted) stopped = true;
+  else signal?.addEventListener?.('abort', stop, { once: true });
+  if (!stopped && autoStart) {
+    startedAt = perfNow();
+    emit(startedAt, true);
+    frame = requestFrame(loop);
+  }
+  return api;
+}
+
+// Backward-compatible alias used by existing drills.
+export function startTimer(onTick, options) {
+  return createTimer(onTick, options);
+}
+
+export function abortableDelay(ms, options = {}) {
+  const { signal } = options;
+  const abortedError = () => signal?.reason || (
+    typeof globalThis.DOMException === 'function'
+      ? new DOMException('Aborted', 'AbortError')
+      : Object.assign(new Error('Aborted'), { name: 'AbortError' })
+  );
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortedError());
+      return;
+    }
+    const onAbort = () => {
+      globalThis.clearTimeout(handle);
+      reject(abortedError());
+    };
+    const handle = globalThis.setTimeout(() => {
+      signal?.removeEventListener?.('abort', onAbort);
+      resolve();
+    }, Math.max(0, ms));
+    signal?.addEventListener?.('abort', onAbort, { once: true });
+  });
+}
+
+export function setPressed(element, pressed) {
+  if (!element) return false;
+  const on = Boolean(pressed);
+  element.setAttribute('aria-pressed', String(on));
+  element.classList.toggle('is-active', on);
+  return on;
 }
 
 // SVG sparkline path from numeric series

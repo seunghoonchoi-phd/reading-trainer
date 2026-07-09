@@ -1,116 +1,257 @@
-// ===== drills/modes.js — explicit gist / scan / mastery mode selector =====
-import { h, mount, startTimer, fmtClock, countUnits, norm } from '../util.js';
+// ===== drills/modes.js — purpose-specific reading with separate metrics =====
+import { h, mount, countUnits, norm, fmtClock } from '../util.js';
 import * as content from '../content.js';
 import * as store from '../store.js';
-import { defaultTier } from '../levels.js';
-import { drillHeader, compQuiz, askMCQ, resultCard, tierPicker, tierLabel, setTeardown } from './shared.js';
+import { t } from '../i18n.js';
+import {
+  drillHeader, compQuiz, askMCQ, resultCard, tierPicker,
+  createDrillTimer, pickUnseenPassage, markPassageStarted,
+  askFatigue, recordAttempt, attemptErrorNote, timingValidity,
+  questionTypeBreakdown,
+  preferredTier, drillTimerElement, attemptContext, applyBenchmarkPace, pickPracticePassage, benchmarkEligible,
+} from './shared.js';
+
+export function isExactLocateAnswer(input, expected) {
+  const actual = norm(input);
+  if (!actual) return false;
+  return String(expected).split('|').map(norm).filter(Boolean).some(answer => actual === answer);
+}
+
+function unitLabel(lang) { return t(lang === 'zh' ? 'drill.shared.cpm' : 'drill.shared.wpm'); }
 
 export default {
-  id: 'modes', name: '모드 선택 (훑기/찾기/정독)', icon: '🎯', track: '전략',
-  goal: '목적에 따라 읽기 깊이를 의식적으로 고르고, 깊이에 맞는 질문으로 평가합니다.',
+  id: 'modes',
+  nameKey: 'drill.modes.name',
+  goalKey: 'drill.modes.goal',
+  whyKey: 'drill.modes.why',
+  evidenceKey: 'drill.modes.evidence',
+  category: 'core', categoryKey: 'drill.category.core',
+  name: '목적별 읽기', icon: '🎯', track: '핵심 훈련',
+  goal: '정확히 읽기, 핵심 파악, 정보 찾기를 구분해 연습합니다.',
   langs: ['en', 'zh'],
-  why: '훑기(gist)는 요지만 빠르게 얻는 합법적 기술이지만 세부 이해는 떨어집니다 — 정독과 섞이면 안 됩니다. 모드를 명시적으로 고르고 그에 맞는 질문으로 채점해, 훑기 성과가 정독 성과로 둔갑하지 못하게 합니다.',
-  evidence: '훑기는 알려진 이해 비용을 지닌 별개 기술(Rayner 2016; Duggan & Payne 2009; Just & Carpenter 1987).',
+  why: '읽는 목적이 다르면 알맞은 평가도 달라야 하며, 서로 다른 결과를 한 점수로 섞으면 안 됩니다.',
+  evidence: '훑기는 세부 이해 비용이 있는 별도 전략이므로 정독 성과와 분리해야 합니다.',
 
-  render(root, lang, exit) {
-    let tier = defaultTier(store.getLevel(lang) || 'builder', content.allTiers(lang)) || 2;
+  render(root, lang, exit, options = {}) {
+    const name = t(this.nameKey);
+    const why = t(this.whyKey);
+    const context = attemptContext(options);
+    const prescribedSubmode = typeof options?.targetSubmode === 'string' ? options.targetSubmode : null;
+    let tier = preferredTier(lang);
 
-    const menu = () => mount(root, drillHeader(this.name, exit, this.why),
+    const menu = () => mount(root, drillHeader(name, exit, why),
       h('div', { class: 'card fade-in' },
-        h('h2', { class: 'h2' }, '읽기 모드를 고르세요'),
-        h('p', { class: 'muted' }, '같은 글이라도 목적이 다르면 읽는 방식이 달라야 합니다.'),
-        tierPicker(lang, tier, t => { tier = t; menu(); }),
+        h('h2', { class: 'h2' }, t('drill.modes.title')),
+        h('p', { class: 'muted' }, t('drill.modes.instructions')),
+        tierPicker(lang, tier, next => { tier = next; menu(); }),
         h('div', { class: 'tiles', style: { marginTop: '12px' } },
-          modeTile('💨', 'Gist · 요지', '시간 제한 안에 훑고 핵심 1문제. 세부 기억은 떨어집니다.', () => gist()),
-          modeTile('🔎', 'Scan · 정보 찾기', '특정 사실 하나를 시간 압박 속에 찾아냅니다.', () => scan()),
-          modeTile('📚', 'Mastery · 정독', '천천히 읽고 전체 이해 + 떠올리기까지.', () => mastery()))));
+          modeTile('📚', t('drill.modes.accuracy_name'), t('drill.modes.accuracy_goal'), accuracy),
+          modeTile('💨', t('drill.modes.gist_name'), t('drill.modes.gist_goal'), gist),
+          modeTile('🔎', t('drill.modes.locate_name'), t('drill.modes.locate_goal'), locate))));
 
-    function modeTile(ico, name, goal, on) {
-      return h('button', { class: 'tile', onClick: on },
-        h('div', { class: 'tile__top' }, h('span', { class: 'tile__ico' }, ico), h('span', { class: 'tile__name' }, name)),
+    function modeTile(icon, title, goal, onClick) {
+      return h('button', { class: 'tile', onClick },
+        h('div', { class: 'tile__top' }, h('span', { class: 'tile__ico' }, icon), h('span', { class: 'tile__name' }, title)),
         h('span', { class: 'tile__goal' }, goal));
     }
 
-    const pick = () => content.pickPassage(lang, tier, []);
+    const pickAccuracy = () => pickUnseenPassage(lang, { tier }) || content.pickPassage(lang, tier, []);
+    const pickPractice = () => pickPracticePassage(lang, { tier });
 
-    // ---- Gist: soft time cap, single main-idea question ----
     const gist = () => {
-      const p = pick(); if (!p) return menu();
+      const p = pickPractice();
+      if (!p || !p.gist) return menu();
+      const novelAtStart = markPassageStarted(p);
       const units = p.unit_count || countUnits(p.text, lang);
-      const cap = Math.max(8, Math.round(units / (lang === 'zh' ? 360 : 320) * 60)); // seconds at skim pace
-      let left = cap;
-      const timerEl = h('span', { class: 'hud__timer' }, left + 's');
-      const iv = setInterval(() => { left--; timerEl.textContent = left + 's'; if (left <= 0) { clearInterval(iv); toQ(); } }, 1000);
-      setTeardown(() => clearInterval(iv)); // 화면 이탈 시 카운트다운이 다른 화면을 덮지 않게
-      const toQ = () => {
-        clearInterval(iv);
+      const configuredSeconds = Number(store.getSetting('gistSeconds'));
+      let capSeconds = Number.isInteger(configuredSeconds) && configuredSeconds >= 20 && configuredSeconds <= 180
+        ? configuredSeconds
+        : Math.max(15, Math.round(units / (lang === 'zh' ? 360 : 320) * 60));
+      let paused = false;
+      let timedOut = false;
+      const timerEl = drillTimerElement('');
+      const reader = h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang },
+        h('div', { class: 'reader-wrap' }, p.text));
+      let timer;
+      const update = ms => {
+        const left = Math.max(0, capSeconds * 1000 - ms);
+        timerEl.textContent = fmtClock(left);
+        if (left <= 0 && !timedOut) {
+          timedOut = true;
+          paused = true;
+          timer.pause();
+          reader.style.visibility = 'hidden';
+          pauseButton.textContent = t('drill.modes.show_and_resume');
+        }
+      };
+      timer = createDrillTimer(update);
+      const pauseButton = h('button', { class: 'btn btn--ghost', onClick: () => {
+        if (paused) {
+          if (timedOut) capSeconds = Math.min(180, Math.ceil(timer.elapsed() / 1000) + 15);
+          paused = false; timedOut = false; timer.resume(); reader.style.visibility = ''; pauseButton.textContent = t('drill.shared.pause');
+        } else {
+          paused = true; timer.pause(); reader.style.visibility = 'hidden'; pauseButton.textContent = t('drill.shared.resume');
+        }
+      } }, t('drill.shared.pause'));
+      const adjust = delta => {
+        capSeconds = Math.max(20, Math.min(180, capSeconds + delta));
+        timedOut = false;
+        update(timer.elapsed());
+      };
+      const toQuestion = () => {
+        const elapsedMs = timer.stop();
+        const rate = elapsedMs > 0 ? units / (elapsedMs / 60000) : 0;
         const host = h('div');
-        mount(root, drillHeader('Gist · 핵심 1문제', exit, null), host);
-        askMCQ(host, p.gist).then(r => {
-          store.addErr(lang, { tier, units, wpm: Math.round(units / (cap / 60)), comp: r.correct ? 1 : 0, err: 0, mode: 'gist' });
-          store.logSession({ drill: 'modes-gist', lang, correct: r.correct });
-          mount(root, drillHeader(this.name, exit, null),
-            resultCard([[r.correct ? '✓' : '✕', '핵심 파악', r.correct ? '요지 정확' : '요지 빗나감']], gist, exit,
-              h('p', { class: 'small muted' }, 'Gist 정확도는 정독 이해도와 ', h('b', null, '따로'), ' 기록됩니다. 훑기로 세부를 안다고 착각하지 마세요.')));
+        mount(root, drillHeader(t('drill.modes.gist_quiz'), exit, null), host);
+        askMCQ(host, p.gist).then(answer => {
+          const answers = [answer];
+          const questionTypes = questionTypeBreakdown([{ ...p.gist, type: 'main_idea' }], answers);
+          askFatigue(root, t('drill.modes.gist_fatigue'), exit).then(fatigue => {
+            const timing = timingValidity(units, elapsedMs, lang);
+            const actualTier = p.tier || tier;
+            const difficulty = (typeof store.getDifficulty === 'function' && store.getDifficulty(lang)) || actualTier;
+            const saved = recordAttempt({
+              drill: 'modes', submode: 'gist', benchmark: false,
+              lang, tier: actualTier, difficulty,
+              passageId: p.id, sourcePassageId: p.id, transferPassageId: null,
+              novelAtStart, assisted: false, completed: true,
+              units, elapsedMs: Math.max(1, Math.round(elapsedMs)), rate: Math.max(1, Math.round(rate)), timingValid: timing.timingValid,
+              correct: answer.correct ? 1 : 0, total: 1, comprehension: answer.correct ? 1 : 0,
+              questionTypes, fatigue,
+              ...context,
+            });
+            mount(root, drillHeader(name, exit, null), resultCard([
+              [answer.correct ? '✓' : '✕', t('drill.modes.gist_result'), answer.correct ? t('drill.modes.gist_correct') : t('drill.modes.gist_incorrect')],
+              [Math.round(rate) + '', unitLabel(lang), t('drill.modes.gist_rate')],
+            ], gist, exit, h('div', { class: 'stack' },
+              !timing.timingValid ? h('div', { class: 'note note--warn' }, t('drill.shared.timing_invalid', { seconds: Math.ceil(timing.minimumMs / 1000) })) : null,
+              h('p', { class: 'small muted' }, t('drill.modes.separate_metrics_note')),
+              attemptErrorNote(saved))));
+          });
         });
       };
-      mount(root, drillHeader('Gist · 요지 훑기', () => { clearInterval(iv); exit(); }, this.why),
-        h('div', { class: 'hud' }, h('span', { class: 'chip' }, `훑기 모드 · 세부 기억 ↓`), timerEl),
-        h('div', { class: 'note note--warn' }, '핵심만 잡으세요. 시간이 끝나면 요지 1문제가 나옵니다.'),
-        h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang }, h('div', { class: 'reader-wrap' }, p.text))),
-        h('div', { class: 'btnrow', style: { marginTop: '12px' } }, h('button', { class: 'btn btn--primary' , onClick: toQ }, '다 훑음 → 핵심 문제')));
+      mount(root, drillHeader(t('drill.modes.gist_read'), () => { timer.stop(); exit(); }, why),
+        h('div', { class: 'hud' }, h('span', { class: 'chip' }, t('drill.modes.gist_chip')), timerEl),
+        h('div', { class: 'note note--warn' }, t('drill.modes.gist_notice')),
+        h('div', { class: 'btnrow', style: { marginTop: '8px' } },
+          h('button', { class: 'btn btn--ghost', onClick: () => adjust(-15) }, t('drill.modes.minus_15')),
+          h('button', { class: 'btn btn--ghost', onClick: () => adjust(15) }, t('drill.modes.plus_15')),
+          pauseButton),
+        h('div', { class: 'card', style: { marginTop: '10px' } }, reader),
+        h('div', { class: 'btnrow', style: { marginTop: '12px' } },
+          h('button', { class: 'btn btn--primary', onClick: toQuestion }, t('drill.modes.finish_gist'))));
     };
 
-    // ---- Scan: find a fact under time pressure ----
-    const scan = () => {
-      const p = pick(); if (!p || !p.scan) return menu();
-      const timerEl = h('span', { class: 'hud__timer' }, '0:00');
-      const t = startTimer(ms => timerEl.textContent = fmtClock(ms));
-      const input = h('input', { type: 'text', placeholder: '찾은 답을 입력' });
-      const fb = h('div');
+    const locate = () => {
+      const p = pickPractice();
+      if (!p || !p.scan) return menu();
+      const novelAtStart = markPassageStarted(p);
+      const timerEl = drillTimerElement();
+      const timer = createDrillTimer(ms => { timerEl.textContent = fmtClock(ms); });
+      let paused = false;
+      const input = h('input', { type: 'text', placeholder: t('drill.modes.locate_placeholder') });
+      const reader = h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang, style: { fontSize: lang === 'zh' ? '1.25rem' : '1.08rem', lineHeight: '1.7' } },
+        h('div', { class: 'reader-wrap' }, p.text));
+      const pauseButton = h('button', { class: 'btn btn--ghost', onClick: () => {
+        if (paused) { paused = false; timer.resume(); reader.style.visibility = ''; input.disabled = false; pauseButton.textContent = t('drill.shared.pause'); }
+        else { paused = true; timer.pause(); reader.style.visibility = 'hidden'; input.disabled = true; pauseButton.textContent = t('drill.shared.resume'); }
+      } }, t('drill.shared.pause'));
       const check = () => {
-        const ms = t.stop();
-        const a = norm(input.value), b = norm(p.scan.answer);
-        const ok = a.length > 0 && (a.includes(b) || b.includes(a));
-        store.logSession({ drill: 'modes-scan', lang, correct: ok, ms });
-        mount(root, drillHeader(this.name, exit, null),
-          resultCard([[ok ? '✓' : '✕', '정보 찾기', `${(ms / 1000).toFixed(1)}초`]], scan, exit,
-            h('div', { class: 'note ' + (ok ? 'note--good' : 'note--warn') }, ok ? '정확히 찾았습니다.' : '정답: ' + p.scan.answer)));
-      };
-      mount(root, drillHeader('Scan · 정보 찾기', () => { t.stop(); exit(); }, this.why),
-        h('div', { class: 'hud' }, h('span', { class: 'chip' }, '아래 질문의 답을 본문에서 찾으세요'), timerEl),
-        h('div', { class: 'note' }, h('b', null, p.scan.q)),
-        h('div', { class: 'card', style: { marginTop: '10px', maxHeight: '46vh', overflow: 'auto' } },
-          h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang, style: { fontSize: lang === 'zh' ? '1.25rem' : '1.08rem', lineHeight: '1.7' } }, h('div', { class: 'reader-wrap' }, p.text))),
-        h('div', { style: { marginTop: '12px' } }, input, fb,
-          h('button', { class: 'btn btn--primary', style: { marginTop: '10px' }, onClick: check }, '확인')));
-    };
-
-    // ---- Mastery: full read + full comprehension + retrieval ----
-    const mastery = () => {
-      const p = pick(); if (!p) return menu();
-      const units = p.unit_count || countUnits(p.text, lang);
-      const t = startTimer();
-      const done = () => {
-        const ms = t.stop(); const wpm = units / (ms / 60000);
-        const host = h('div');
-        mount(root, drillHeader('Mastery · 이해 확인', exit, null), host);
-        compQuiz(host, (p.questions || []).slice()).then(res => {
-          const err = res.frac < 0.6 ? 0 : Math.round(wpm * res.frac);
-          store.addErr(lang, { tier, units, wpm: Math.round(wpm), comp: res.frac, err, mode: 'full' });
-          store.logSession({ drill: 'modes-mastery', lang, err, comp: res.frac });
-          mount(root, drillHeader(this.name, exit, null),
-            resultCard([[err + '', 'ERR'], [Math.round(res.frac * 100) + '%', '정독 이해도']], mastery, exit,
-              h('p', { class: 'small muted' }, '정독 이해도는 Gist 정확도와 분리해 기록됩니다. 둘의 격차가 곧 전략 선택의 근거입니다.')));
+        if (paused || !input.value.trim()) return;
+        const elapsedMs = timer.stop();
+        const correct = isExactLocateAnswer(input.value, p.scan.answer);
+        askFatigue(root, t('drill.modes.locate_fatigue'), exit).then(fatigue => {
+          const actualTier = p.tier || tier;
+          const difficulty = (typeof store.getDifficulty === 'function' && store.getDifficulty(lang)) || actualTier;
+          const saved = recordAttempt({
+            drill: 'modes', submode: 'locate', benchmark: false,
+            lang, tier: actualTier, difficulty,
+            passageId: p.id, sourcePassageId: p.id, transferPassageId: null,
+            novelAtStart, assisted: false, completed: true,
+            units: null, elapsedMs: Math.max(1, Math.round(elapsedMs)), rate: null, timingValid: true,
+            correct: correct ? 1 : 0, total: 1, comprehension: null,
+            questionTypes: { locate: { correct: correct ? 1 : 0, total: 1 } }, fatigue,
+            ...context,
+          });
+          mount(root, drillHeader(name, exit, null), resultCard([
+            [correct ? '✓' : '✕', t('drill.modes.locate_result'), t('drill.modes.seconds', { seconds: (elapsedMs / 1000).toFixed(1) })],
+          ], locate, exit, h('div', { class: 'stack' },
+            h('div', { class: 'note ' + (correct ? 'note--good' : 'note--warn') }, correct ? t('drill.modes.locate_correct') : t('drill.modes.locate_answer', { answer: p.scan.answer })),
+            attemptErrorNote(saved))));
         });
       };
-      mount(root, drillHeader('Mastery · 정독', () => { t.stop(); exit(); }, this.why),
-        h('div', { class: 'note note--good' }, '천천히, 정확히. 되돌아 읽어도 됩니다. 끝나면 전체 이해 문제가 나옵니다.'),
-        h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'eyebrow' }, p.title || '지문'),
-          h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang }, h('div', { class: 'reader-wrap' }, p.text))),
-        h('div', { class: 'btnrow', style: { marginTop: '12px' } }, h('button', { class: 'btn btn--primary btn--lg', onClick: done }, '다 읽음 → 이해 확인')));
+      mount(root, drillHeader(t('drill.modes.locate_read'), () => { timer.stop(); exit(); }, why),
+        h('div', { class: 'hud' }, h('span', { class: 'chip' }, t('drill.modes.locate_chip')), timerEl),
+        h('div', { class: 'note' }, h('b', null, p.scan.q)),
+        h('div', { class: 'card', style: { marginTop: '10px', maxHeight: '46vh', overflow: 'auto' } }, reader),
+        h('div', { style: { marginTop: '12px' } }, input,
+          h('div', { class: 'btnrow', style: { marginTop: '10px' } },
+            h('button', { class: 'btn btn--primary', onClick: check }, t('drill.shared.check')),
+            pauseButton)));
     };
 
-    menu();
+    const accuracy = () => {
+      const p = pickAccuracy();
+      if (!p) return menu();
+      const novelAtStart = markPassageStarted(p);
+      const units = p.unit_count || countUnits(p.text, lang);
+      const timerEl = drillTimerElement();
+      const timer = createDrillTimer(ms => { timerEl.textContent = fmtClock(ms); });
+      let paused = false;
+      const reader = h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang },
+        h('div', { class: 'reader-wrap' }, p.text));
+      const pauseButton = h('button', { class: 'btn btn--ghost', onClick: () => {
+        if (paused) { paused = false; timer.resume(); reader.style.visibility = ''; pauseButton.textContent = t('drill.shared.pause'); }
+        else { paused = true; timer.pause(); reader.style.visibility = 'hidden'; pauseButton.textContent = t('drill.shared.resume'); }
+      } }, t('drill.shared.pause'));
+      const done = () => {
+        if (paused) return;
+        const elapsedMs = timer.stop();
+        const rate = elapsedMs > 0 ? units / (elapsedMs / 60000) : 0;
+        const host = h('div');
+        mount(root, drillHeader(t('drill.modes.accuracy_quiz'), exit, null), host);
+        compQuiz(host, (p.questions || []).slice()).then(result => {
+          askFatigue(root, t('drill.modes.accuracy_fatigue'), exit).then(fatigue => {
+            const timing = timingValidity(units, elapsedMs, lang);
+            const actualTier = p.tier || tier;
+            const difficulty = (typeof store.getDifficulty === 'function' && store.getDifficulty(lang)) || actualTier;
+            const benchmark = benchmarkEligible({
+              novelAtStart, assisted: false, timingValid: timing.timingValid,
+              tier: actualTier, difficulty, total: result.total, expectedTotal: (p.questions || []).length,
+            });
+            const saved = recordAttempt({
+              drill: 'modes', submode: 'accuracy', benchmark,
+              lang, tier: actualTier, difficulty,
+              passageId: p.id, sourcePassageId: p.id, transferPassageId: null,
+              novelAtStart, assisted: false, completed: true,
+              units, elapsedMs: Math.max(1, Math.round(elapsedMs)), rate: Math.max(1, Math.round(rate)), timingValid: timing.timingValid,
+              correct: result.correct, total: result.total, comprehension: result.frac,
+              questionTypes: result.questionTypes, fatigue,
+              ...context,
+            });
+            applyBenchmarkPace(saved);
+            mount(root, drillHeader(name, exit, null), resultCard([
+              [Math.round(rate) + '', unitLabel(lang), t('drill.modes.accuracy_rate')],
+              [Math.round(result.frac * 100) + '%', t('drill.shared.comprehension'), `${result.correct}/${result.total}`],
+            ], accuracy, exit, h('div', { class: 'stack' },
+              !timing.timingValid ? h('div', { class: 'note note--warn' }, t('drill.shared.timing_invalid', { seconds: Math.ceil(timing.minimumMs / 1000) })) : null,
+              h('p', { class: 'small muted' }, t('drill.modes.accuracy_note')),
+              attemptErrorNote(saved))));
+          });
+        });
+      };
+      mount(root, drillHeader(t('drill.modes.accuracy_read'), () => { timer.stop(); exit(); }, why),
+        h('div', { class: 'hud' }, h('span', { class: 'chip' }, novelAtStart ? t('drill.shared.unseen') : t('drill.shared.seen_before')), timerEl),
+        h('div', { class: 'note note--good' }, t('drill.modes.accuracy_notice')),
+        h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'eyebrow' }, p.title || t('drill.shared.passage')), reader),
+        h('div', { class: 'btnrow', style: { marginTop: '12px' } },
+          h('button', { class: 'btn btn--primary btn--lg', onClick: done }, t('drill.modes.finish_accuracy')),
+          pauseButton));
+    };
+
+    if (prescribedSubmode === 'gist') gist();
+    else if (prescribedSubmode === 'accuracy') accuracy();
+    else if (prescribedSubmode === 'locate') locate();
+    else menu();
   },
 };

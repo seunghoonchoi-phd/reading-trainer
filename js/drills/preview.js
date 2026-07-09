@@ -1,59 +1,83 @@
-// ===== drills/preview.js — topic-sentence foraging (within-span, NOT span widening) =====
+// ===== drills/preview.js — paragraph-opening preview practice =====
 import { h, mount } from '../util.js';
 import * as content from '../content.js';
 import { splitParagraphs, splitSentences } from '../content.js';
-import * as store from '../store.js';
-import { defaultTier } from '../levels.js';
-import { drillHeader, askMCQ, resultCard, tierPicker } from './shared.js';
+import { t } from '../i18n.js';
+import {
+  drillHeader, askMCQ, resultCard, tierPicker, preferredTier,
+  markPassageStarted, recordAttempt, attemptErrorNote, attemptContext, currentDifficulty,
+  pickPracticePassage,
+} from './shared.js';
 
 export default {
-  id: 'preview', name: '미리보기 활용', icon: '⟶', track: '구조 활용',
-  goal: '자연 지각폭과 글의 구조를 효율적으로 “활용”합니다 — 시야폭을 넓히는 게 아닙니다.',
+  id: 'preview',
+  nameKey: 'drill.preview.name',
+  goalKey: 'drill.preview.goal',
+  whyKey: 'drill.preview.why',
+  evidenceKey: 'drill.preview.evidence',
+  category: 'practice', categoryKey: 'drill.category.practice',
+  name: '문단 미리보기', icon: '⟶', track: '연습',
+  goal: '문단의 첫 문장을 보고 글의 방향을 예측한 뒤 전체 글과 비교합니다.',
   langs: ['en', 'zh'],
-  why: '지각폭은 고정돼 있어 넓힐 수 없습니다(영어 식별 ~7–8자, 중국어 ~3자). 대신 할 수 있는 건 자연 폭의 효율적 활용: 다음 단어 미리보기, 문단 첫 문장으로 논지 예측(포레이징). 이 드릴은 폭 확장을 약속하지 않습니다.',
-  evidence: '철자/음운 미리보기 효과는 견고(~20–50ms), 의미 미리보기는 영어에서 불안정(Rayner 경계 패러다임). 훑기 독자의 문단 앞부분 “만족화”(Duggan & Payne 2009). 중국어 폭 캡 ~3–4자(Inhoff & Liu 1998).',
+  why: '문단 구조를 활용하는 연습이며 시야가 넓어진다고 주장하지 않습니다.',
+  evidence: '문단 앞부분을 활용한 예측은 선택적으로 읽을 곳을 정하는 데 도움을 줄 수 있습니다.',
 
-  render(root, lang, exit) {
-    let tier = defaultTier(store.getLevel(lang) || 'builder', content.allTiers(lang)) || 3;
+  render(root, lang, exit, options = {}) {
+    const name = t(this.nameKey);
+    const why = t(this.whyKey);
+    const context = attemptContext(options);
+    const difficulty = currentDifficulty(lang);
+    let tier = preferredTier(lang);
 
-    const setup = () => mount(root, drillHeader(this.name, exit, this.why),
+    const setup = () => mount(root, drillHeader(name, exit, why),
       h('div', { class: 'card fade-in' },
-        h('h2', { class: 'h2' }, '주제문 포레이징'),
-        h('p', { class: 'muted' }, '각 문단의 ', h('b', null, '첫 문장만'), ' 보고 글 전체의 논지를 예측합니다. 그다음 전체를 펼쳐 확인합니다.'),
-        h('div', { class: 'note note--warn' }, '이건 “한눈에 더 많이 보기”가 아니라, 글의 구조를 이용해 어디를 깊게 볼지 고르는 훈련입니다.'),
-        tierPicker(lang, tier, t => { tier = t; setup(); }),
+        h('h2', { class: 'h2' }, t('drill.preview.title')),
+        h('p', { class: 'muted' }, t('drill.preview.instructions')),
+        h('div', { class: 'note note--warn' }, t('drill.preview.scope_note')),
+        tierPicker(lang, tier, next => { tier = next; setup(); }),
         h('div', { class: 'btnrow', style: { marginTop: '14px' } },
-          h('button', { class: 'btn btn--primary btn--lg', onClick: forage }, '시작'))));
+          h('button', { class: 'btn btn--primary btn--lg', onClick: forage }, t('drill.preview.start')))));
 
     const forage = () => {
-      const p = content.pickPassage(lang, tier);
+      const p = pickPracticePassage(lang, { tier });
       if (!p) return setup();
-      const paras = splitParagraphs(p.text);
-      const leads = paras.map(par => splitSentences(par, lang)[0] || par);
-      mount(root, drillHeader('포레이징 · 첫 문장만', exit, this.why),
-        h('div', { class: 'hud' }, h('span', { class: 'chip' }, '문단 첫 문장만 노출')),
+      const novelAtStart = markPassageStarted(p);
+      const leads = splitParagraphs(p.text).map(paragraph => splitSentences(paragraph, lang)[0] || paragraph);
+      mount(root, drillHeader(t('drill.preview.leads_title'), exit, why),
+        h('div', { class: 'hud' }, h('span', { class: 'chip' }, t('drill.preview.leads_only'))),
         h('div', { class: 'card' },
-          h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang, style: { fontSize: lang === 'zh' ? '1.3rem' : '1.12rem' } },
-            h('div', { class: 'reader-wrap' }, ...leads.map(s => h('p', null, s,
-              h('span', { class: 'span-blur', style: { userSelect: 'none' } }, lang === 'zh' ? ' （…后文省略…）' : ' …(rest hidden)…')))))),
-        h('div', { class: 'btnrow', style: { marginTop: '12px' } }, h('button', { class: 'btn btn--primary', onClick: () => predict(p) }, '논지 예측하기')));
+          h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang },
+            h('div', { class: 'reader-wrap' }, ...leads.map(sentence => h('p', null, sentence,
+              h('span', { class: 'span-blur', style: { userSelect: 'none' } }, t(lang === 'zh' ? 'drill.preview.hidden_zh' : 'drill.preview.hidden_en'))))))),
+        h('div', { class: 'btnrow', style: { marginTop: '12px' } },
+          h('button', { class: 'btn btn--primary', onClick: () => predict(p, novelAtStart) }, t('drill.preview.predict'))));
     };
 
-    const predict = (p) => {
+    const predict = (p, novelAtStart) => {
       const host = h('div');
-      mount(root, drillHeader('논지 예측', exit, null),
-        h('div', { class: 'note' }, '첫 문장들만 보고, 글의 핵심 주장을 고르세요.'), host);
-      askMCQ(host, p.gist).then(r => reveal(p, r.correct));
+      mount(root, drillHeader(t('drill.preview.predict_title'), exit, null),
+        h('div', { class: 'note' }, t('drill.preview.predict_note')), host);
+      askMCQ(host, p.gist).then(answer => reveal(p, novelAtStart, answer.correct));
     };
 
-    const reveal = (p, correct) => {
-      store.logSession({ drill: 'preview', lang, correct });
-      mount(root, drillHeader('전체 확인', exit, null),
+    const reveal = (p, novelAtStart, correct) => {
+      const saved = recordAttempt({
+        drill: 'preview', submode: 'paragraph_preview', benchmark: false,
+        lang, tier: p.tier || tier, difficulty,
+        passageId: p.id, sourcePassageId: p.id, transferPassageId: null,
+        novelAtStart, assisted: true, completed: true,
+        units: null, elapsedMs: null, rate: null, timingValid: true,
+        correct: correct ? 1 : 0, total: 1, comprehension: null,
+        questionTypes: { main_idea: { correct: correct ? 1 : 0, total: 1 } },
+        fatigue: null,
+        ...context,
+      });
+      mount(root, drillHeader(t('drill.preview.reveal_title'), exit, null),
         h('div', { class: 'card' },
-          h('div', { class: 'note ' + (correct ? 'note--good' : 'note--warn') }, correct ? '첫 문장만으로 논지를 정확히 잡았습니다 — 구조 활용 성공.' : '첫 문장만으로는 빗나갔습니다. 이런 글은 깊게 읽어야 합니다.'),
+          h('div', { class: 'note ' + (correct ? 'note--good' : 'note--warn') }, t(correct ? 'drill.preview.correct_feedback' : 'drill.preview.incorrect_feedback')),
           h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang, style: { marginTop: '12px' } }, h('div', { class: 'reader-wrap' }, p.text))),
-        resultCard([[correct ? '✓' : '✕', '논지 예측']], () => this.render(root, lang, exit), exit,
-          h('p', { class: 'small muted' }, '문단 첫 문장(주제문)에 핵심이 모이는 글이 많습니다. 단, 첫 문장이 빗나가는 글은 훑기로 충분치 않다는 신호입니다.')));
+        resultCard([[correct ? '✓' : '✕', t('drill.preview.result_label')]], () => this.render(root, lang, exit, options), exit,
+          h('div', { class: 'stack' }, h('p', { class: 'small muted' }, t('drill.preview.result_note')), attemptErrorNote(saved))));
     };
 
     setup();

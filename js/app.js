@@ -1,944 +1,1225 @@
-// ===== app.js — entry, router, views =====
-import { h, mount, $, $$, clear, countUnits, startTimer, fmtClock, sparkline, mean, median, clamp, shuffle } from './util.js';
+// ===== app.js: shell, four-step program, settings, and progress =====
+import {
+  h, mount, $, $$, clear, countUnits, startTimer, fmtClock, sparkline,
+  median, setPressed,
+} from './util.js';
 import * as store from './store.js';
 import * as content from './content.js';
-import { LEVELS, LEVEL_ORDER, levelOf, defaultTier, recommendLevel } from './levels.js';
-import { path as progressionPath, seedClears } from './progression.js';
-import { DRILLS, TRACKS, DRILL_BY_ID } from './drills/index.js';
+import * as metrics from './metrics.js';
+import * as program from './program.js';
+import {
+  DIFFICULTIES, DIFFICULTY_ORDER, difficultyLabel,
+} from './levels.js';
+import { DRILLS, DRILL_BY_ID } from './drills/index.js';
 import { renderTheory } from './theory.js';
-import { compQuiz, setTeardown, runTeardown } from './drills/shared.js';
-import triage from './drills/triage.js';
+import {
+  compQuiz, resultCard, setTeardown, runTeardown, askFatigue,
+  recordAttempt, attemptErrorNote, timingValidity,
+} from './drills/shared.js';
 import conquer from './drills/conquer.js';
-import { tamper } from './drills/sentence.js';
+import triage from './drills/triage.js';
 import { icon, iconSvg, DRILL_ICON } from './icons.js';
+import {
+  initI18n, getUILang, setUILang, t, registerMessages, translateDocument,
+} from './i18n.js';
 
+registerMessages('ko', {
+  'app.loading': '콘텐츠 불러오는 중…',
+  'app.theme.light': '밝게 전환',
+  'app.theme.dark': '어둡게 전환',
+  'app.leave': '진행 중인 훈련을 중단할까요? 이번 시도는 완료 기록에 들어가지 않습니다.',
+  'app.unit.en': 'WPM',
+  'app.unit.zh': '자/분',
+  'app.common.start': '시작',
+  'app.common.again': '다시',
+  'app.common.done': '완료',
+  'app.common.open': '열기',
+  'app.common.save': '저장',
+  'app.common.cancel': '취소',
+  'app.common.error': '문제가 생겼습니다.',
+  'app.common.no_passage': '조건에 맞는 글이 없습니다.',
+  'app.common.not_available': '없음',
+  'app.common.storage_error': '브라우저 저장공간에 기록하지 못했습니다. 저장 용량과 브라우저 설정을 확인해 주세요.',
+  'app.recovery.title': '저장 데이터 복구가 필요합니다',
+  'app.recovery.body': '기존 저장 데이터가 손상되었거나 더 새로운 버전이라 현재 앱이 안전하게 읽을 수 없습니다. 앱은 원문을 덮어쓰지 않았고, 가능한 경우 별도 복구 키에도 보존했습니다. 먼저 원문 백업을 내려받은 뒤 새 데이터로 시작할 수 있습니다.',
+  'app.recovery.key': '브라우저 복구 키: {key}',
+  'app.recovery.key_unavailable': '브라우저 복구 키를 만들지 못했지만, 이 화면을 닫기 전에는 원문 백업을 내려받을 수 있습니다.',
+  'app.recovery.download': '읽지 못한 원문 백업 받기',
+  'app.recovery.start_fresh': '백업 후 새로 시작',
+  'app.recovery.confirm1': '원문 백업을 확인했나요? 기존 리드패스트 저장 키를 새 데이터로 바꿉니다.',
+  'app.recovery.confirm2': '별도 복구 키와 내려받은 파일은 남습니다. 정말 새로 시작할까요?',
+  'app.difficulty.title': '임시 시작 난이도를 고르세요',
+  'app.difficulty.lead': '이 값은 자격 등급이 아닙니다. 먼저 읽기 편한 글부터 시작하고, 처음 보는 글 기록이 3회 쌓이면 앱이 새 난이도를 제안합니다.',
+  'app.difficulty.badge': '앱 난이도',
+  'app.difficulty.choose': '이 난이도로 시작',
+  'app.difficulty.library': '먼저 전체 훈련 보기',
+  'app.home.eyebrow': '오늘의 훈련',
+  'app.home.title': '오늘의 10분',
+  'app.home.lead': '짧게 준비하고, 한 가지에 집중한 뒤, 다른 글이나 인출로 끝냅니다.',
+  'app.home.phase': '현재 단계',
+  'app.home.streak': '연속일',
+  'app.home.maintained': '이해 유지 속도',
+  'app.home.need_data': '처음 보는 글 기록이 더 필요합니다',
+  'app.home.samples': '유효 기록 {count}회',
+  'app.home.today_count': '오늘 완료 {count}/3',
+  'app.home.all_unlocked': '모든 훈련은 언제든 직접 열 수 있습니다.',
+  'app.home.recommend_title': '시작 난이도 제안',
+  'app.home.recommend_body': '처음 보는 글 3회의 결과로 앱 난이도 {difficulty}를 임시 제안합니다. 자동으로 바꾸지 않습니다.',
+  'app.home.recommend_apply': '제안 적용',
+  'app.plan.prepare': '1. 준비',
+  'app.plan.focus': '2. 본훈련',
+  'app.plan.transfer': '3. 전이·인출',
+  'app.plan.minutes': '약 {minutes}분',
+  'app.plan.repeat': '한 번 더',
+  'app.plan.reason.prepare.baseline': '어휘를 짧게 깨우고 기준선 읽기를 준비합니다.',
+  'app.plan.reason.focus.baseline': '처음 보는 글을 도움 없이 읽고 현재 속도와 이해를 잽니다.',
+  'app.plan.reason.transfer.baseline': '방금 읽은 내용을 보지 않고 꺼내 봅니다.',
+  'app.plan.reason.prepare.weakness': '본훈련 전에 자주 쓰는 어휘를 복습합니다.',
+  'app.plan.reason.focus.weakness': '최근 오답에서 가장 약한 한 부분만 연습합니다.',
+  'app.plan.reason.transfer.weakness': '연습 뒤 기억에서 핵심을 다시 꺼냅니다.',
+  'app.plan.reason.prepare.transfer': '새 글 전이 전에 앞서 읽은 내용을 짧게 떠올립니다.',
+  'app.plan.reason.focus.transfer': '같은 글 연습 뒤 처음 보는 관련 글에서 다시 확인합니다.',
+  'app.plan.reason.transfer.transfer': '도움 없는 정확 읽기로 전이 결과를 한 번 더 확인합니다.',
+  'app.plan.reason.prepare.reassessment': '주간 재측정 전에 어휘를 짧게 복습합니다.',
+  'app.plan.reason.focus.reassessment': '처음 보는 글로 이번 주 속도와 이해를 다시 잽니다.',
+  'app.plan.reason.transfer.reassessment': '측정한 내용을 보지 않고 다시 꺼내 봅니다.',
+  'app.plan.reason.prepare.maintenance': '재측정일까지 자주 쓰는 어휘를 짧게 복습합니다.',
+  'app.plan.reason.focus.maintenance': '새 평가 글을 쓰지 않고 최근에 약했던 부분을 유지합니다.',
+  'app.plan.reason.transfer.maintenance': '이미 읽은 글의 핵심을 보지 않고 다시 꺼냅니다.',
+  'app.phase.baseline': '1. 현재 상태 확인',
+  'app.phase.weakness': '2. 약한 부분 연습',
+  'app.phase.transfer': '3. 처음 보는 글 전이',
+  'app.phase.reassessment': '4. 주간 재측정',
+  'app.phase.pending': '예정',
+  'app.phase.active': '지금',
+  'app.phase.scheduled': '재측정일 대기',
+  'app.phase.done': '완료',
+  'app.phase.progress': '{done}/{goal}',
+  'app.phase.next_date': '{date}부터 재측정',
+  'app.train.title': '훈련',
+  'app.train.lead': '네 단계를 반복하되, 필요한 훈련은 아래 목록에서 언제든 바로 시작할 수 있습니다.',
+  'app.train.cycle': '이번 훈련 순환',
+  'app.train.library': '전체 훈련 도구',
+  'app.train.library_help': '잠금은 없습니다. 네 단계는 추천 순서이고, 목록은 직접 연습할 때 씁니다.',
+  'app.category.core': '핵심 훈련',
+  'app.category.language_support': '언어별 보조',
+  'app.category.practice': '연습·실험',
+  'app.category.tool': '실전 도구',
+  'app.mytexts.title': '내 글',
+  'app.mytexts.lead': '읽고 있는 영어·중국어 글을 붙여넣어 연습할 수 있습니다. 자동 문제는 검증 문항이 아니므로 대표 기록에는 쓰지 않습니다.',
+  'app.mytexts.form_title': '새 글 저장',
+  'app.mytexts.title_label': '제목',
+  'app.mytexts.title_placeholder': '제목은 선택입니다',
+  'app.mytexts.body_label': '본문',
+  'app.mytexts.body_placeholder.en': '영어 책이나 논문의 단락을 붙여넣으세요.',
+  'app.mytexts.body_placeholder.zh': '중국어 책이나 논문의 단락을 붙여넣으세요.',
+  'app.mytexts.limit': '한 글 100,000자, 전체 1,000,000자까지 저장합니다. 현재 {count}자 입력했습니다.',
+  'app.mytexts.saved': '저장한 글',
+  'app.mytexts.empty': '아직 저장한 글이 없습니다.',
+  'app.mytexts.remove': '이 글을 브라우저 저장공간에서 지울까요?',
+  'app.mytexts.remove_label': '글 삭제',
+  'app.mytexts.read': '속도·이해 확인',
+  'app.mytexts.conquer': '반복읽기 연습',
+  'app.mytexts.triage': '논문 3단계 도구',
+  'app.mytexts.privacy': '붙여넣은 글은 이 브라우저 안에만 저장됩니다. 앱 화면은 제3자 분석 스크립트를 불러오지 않습니다.',
+  'app.custom.title': '내 글 읽기',
+  'app.custom.instructions': '평소처럼 읽으세요. 다 읽으면 자동 빈칸 문제로 스스로 확인합니다.',
+  'app.custom.finish': '다 읽음 · 이해 확인',
+  'app.custom.quiz': '자동 문제 · 자기 점검',
+  'app.custom.result': '자동 문제 결과는 대표 속도나 난이도 제안에 들어가지 않습니다.',
+  'app.custom.no_quiz': '이 글에서는 자동 문제를 만들지 못해 속도만 저장했습니다.',
+  'app.progress.title': '기록',
+  'app.progress.lead': '속도와 이해를 따로 보고, 처음 보는 글에서 유지된 결과만 대표값으로 봅니다.',
+  'app.progress.headline': '이해 유지 속도',
+  'app.progress.headline_note': '처음 보는 글을 도움 없이 읽고 이해 80% 이상을 얻은 최근 기록의 중앙값',
+  'app.progress.transfer': '새 글 전이 중앙값',
+  'app.progress.transfer_note': '이해 80% 이상 {qualified}/{total}회',
+  'app.progress.accuracy': '최근 정확 읽기',
+  'app.progress.rate': '읽은 속도',
+  'app.progress.comprehension': '이해도',
+  'app.progress.rate_curve': '속도 변화',
+  'app.progress.comp_curve': '이해 변화',
+  'app.progress.question_types': '문항 유형별 정확도',
+  'app.progress.main_idea': '중심 생각',
+  'app.progress.inference': '추론',
+  'app.progress.detail': '세부 내용',
+  'app.progress.other': '그 밖의 문항',
+  'app.progress.mode_results': '읽는 목적별 결과',
+  'app.progress.mode.accuracy': '정확히 읽기',
+  'app.progress.mode.gist': '핵심 파악',
+  'app.progress.mode.locate': '정보 찾기',
+  'app.progress.adjustment': '다음 조절',
+  'app.progress.adjust.increase': '이해가 두 번 유지되고 피로가 낮았습니다. 다음 목표 속도를 약 5% 올립니다.',
+  'app.progress.adjust.hold': '속도와 난이도를 그대로 두고 기록을 더 모읍니다.',
+  'app.progress.adjust.decrease': '이해가 60% 미만이거나 피로가 높았습니다. 다음에는 속도 한 축만 낮춥니다.',
+  'app.progress.total': '새 형식 완료 기록 {count}회',
+  'app.progress.legacy': '예전 기록은 백업으로 보존하지만 새 대표값과 단계 판정에는 쓰지 않습니다.',
+  'app.settings.title': '설정',
+  'app.settings.lead': '훈련 언어와 화면 언어를 분리하고, 읽기 화면과 타이머를 직접 조절할 수 있습니다.',
+  'app.settings.language': '언어',
+  'app.settings.ui_language': '화면 언어',
+  'app.settings.training_language': '훈련 언어',
+  'app.settings.korean': '한국어',
+  'app.settings.english': 'English',
+  'app.settings.difficulty': '앱 난이도',
+  'app.settings.difficulty_help': '글의 난이도 1~6입니다. 언어 자격 등급이 아닙니다.',
+  'app.settings.display': '읽기 화면',
+  'app.settings.font_size': '본문 글자 크기',
+  'app.settings.line_height': '줄 간격',
+  'app.settings.width': '읽기 폭',
+  'app.settings.reduce_motion': '움직임 줄이기',
+  'app.settings.timer': '타이머',
+  'app.settings.timer_visible': '읽는 동안 시간 숫자 보기',
+  'app.settings.gist_seconds': '핵심 파악 기본 시간',
+  'app.settings.seconds': '{value}초',
+  'app.settings.theme': '화면 밝기',
+  'app.settings.auto': '자동',
+  'app.settings.light': '밝게',
+  'app.settings.dark': '어둡게',
+  'app.settings.data': '데이터',
+  'app.settings.data_help': '기록과 내 글은 이 브라우저에 저장됩니다. 기기를 바꿀 때는 백업 파일을 옮기세요.',
+  'app.settings.export': '백업 내보내기',
+  'app.settings.import': '백업 가져오기',
+  'app.settings.imported': '백업을 가져왔습니다.',
+  'app.settings.import_failed': '백업을 가져오지 못했습니다: {reason}',
+  'app.settings.reset_progress': '훈련 기록 초기화',
+  'app.settings.reset_progress_confirm': '새 기록과 예전 훈련 기록을 초기화할까요? 내 글과 설정은 남습니다.',
+  'app.settings.reset_all': '모든 로컬 데이터 지우기',
+  'app.settings.reset_all_confirm1': '붙여넣은 글을 포함해 이 브라우저의 리드패스트 데이터를 모두 지울까요?',
+  'app.settings.reset_all_confirm2': '이 작업은 되돌릴 수 없습니다. 정말 지울까요?',
+  'app.settings.install': '앱으로 설치',
+  'app.settings.install_help': '홈 화면에 추가하면 처음 불러온 뒤에는 오프라인에서도 쓸 수 있습니다.',
+  'app.settings.install_button': '설치',
+  'app.settings.install_manual': '휴대폰에서는 브라우저 공유 메뉴의 “홈 화면에 추가”를, PC에서는 주소창의 설치 아이콘을 누르세요.',
+  'app.settings.privacy': '개인정보와 붙여넣은 글',
+  'app.settings.privacy_body': '앱은 계정이나 서버 저장을 쓰지 않습니다. 붙여넣은 글은 현재 브라우저에만 남고, 앱 화면에는 제3자 분석 자바스크립트가 없습니다.',
+  'app.settings.about': '만든 사람',
+  'app.settings.about_body': '재료공학 연구자 최승훈이 영어·중국어 글을 읽을 때 쓰려고 만들었습니다. 속도와 이해를 따로 기록하고, 처음 보는 글에서 다시 확인하도록 설계했습니다.',
+  'app.settings.source': '소스 코드',
+  'app.settings.principles': '원리·출처',
+});
+
+registerMessages('en', {
+  'app.loading': 'Loading content…',
+  'app.theme.light': 'Switch to light theme',
+  'app.theme.dark': 'Switch to dark theme',
+  'app.leave': 'Stop the current practice? This attempt will not count as completed.',
+  'app.unit.en': 'WPM',
+  'app.unit.zh': 'characters/min',
+  'app.common.start': 'Start',
+  'app.common.again': 'Again',
+  'app.common.done': 'Done',
+  'app.common.open': 'Open',
+  'app.common.save': 'Save',
+  'app.common.cancel': 'Cancel',
+  'app.common.error': 'Something went wrong.',
+  'app.common.no_passage': 'No text matches these conditions.',
+  'app.common.not_available': 'N/A',
+  'app.common.storage_error': 'The browser could not save this change. Check available storage and browser settings.',
+  'app.recovery.title': 'Stored data needs recovery',
+  'app.recovery.body': 'The existing saved data may be damaged or from a newer version, so this app cannot read it safely. ReadFast did not overwrite it. When browser storage allowed it, the raw text was also copied to a separate recovery key. Download the raw backup before starting with fresh data.',
+  'app.recovery.key': 'Browser recovery key: {key}',
+  'app.recovery.key_unavailable': 'A browser recovery key could not be created, but the raw backup can still be downloaded before you leave this screen.',
+  'app.recovery.download': 'Download unreadable raw backup',
+  'app.recovery.start_fresh': 'Start fresh after backup',
+  'app.recovery.confirm1': 'Have you checked the raw backup? This will replace the main ReadFast storage key with fresh data.',
+  'app.recovery.confirm2': 'The separate recovery key and downloaded file will remain. Start fresh now?',
+  'app.difficulty.title': 'Choose a provisional starting difficulty',
+  'app.difficulty.lead': 'This is not a language certificate level. Start with a comfortable text. After three unseen attempts, the app can suggest a new provisional difficulty.',
+  'app.difficulty.badge': 'App difficulty',
+  'app.difficulty.choose': 'Start here',
+  'app.difficulty.library': 'Browse all practice first',
+  'app.home.eyebrow': 'Today’s practice',
+  'app.home.title': 'Your ten-minute session',
+  'app.home.lead': 'Prepare briefly, focus on one need, then finish with a different text or retrieval.',
+  'app.home.phase': 'Current step',
+  'app.home.streak': 'day streak',
+  'app.home.maintained': 'maintained-comprehension rate',
+  'app.home.need_data': 'More unseen-text attempts are needed',
+  'app.home.samples': '{count} qualifying attempts',
+  'app.home.today_count': '{count}/3 completed today',
+  'app.home.all_unlocked': 'Every practice tool remains directly available.',
+  'app.home.recommend_title': 'Starting-difficulty suggestion',
+  'app.home.recommend_body': 'Three unseen-text attempts suggest app difficulty {difficulty}. The app will not change it automatically.',
+  'app.home.recommend_apply': 'Apply suggestion',
+  'app.plan.prepare': '1. Prepare',
+  'app.plan.focus': '2. Focus',
+  'app.plan.transfer': '3. Transfer or retrieve',
+  'app.plan.minutes': 'about {minutes} min',
+  'app.plan.repeat': 'Repeat',
+  'app.plan.reason.prepare.baseline': 'Warm up frequent words before a baseline read.',
+  'app.plan.reason.focus.baseline': 'Read an unseen text without help and measure rate and comprehension.',
+  'app.plan.reason.transfer.baseline': 'Retrieve the main points without looking back.',
+  'app.plan.reason.prepare.weakness': 'Review frequent words before focused practice.',
+  'app.plan.reason.focus.weakness': 'Practice only the weakest area in recent answers.',
+  'app.plan.reason.transfer.weakness': 'Retrieve the key information after practice.',
+  'app.plan.reason.prepare.transfer': 'Recall the prior text briefly before the transfer check.',
+  'app.plan.reason.focus.transfer': 'After rereading practice, check a related unseen text.',
+  'app.plan.reason.transfer.transfer': 'Use an unassisted accurate read for another transfer check.',
+  'app.plan.reason.prepare.reassessment': 'Review vocabulary briefly before weekly reassessment.',
+  'app.plan.reason.focus.reassessment': 'Measure this week’s rate and comprehension on an unseen text.',
+  'app.plan.reason.transfer.reassessment': 'Retrieve what you measured without looking back.',
+  'app.plan.reason.prepare.maintenance': 'Review frequent words while waiting for reassessment day.',
+  'app.plan.reason.focus.maintenance': 'Maintain a recent weak area without consuming a new assessment text.',
+  'app.plan.reason.transfer.maintenance': 'Retrieve the main points of a text you have already read.',
+  'app.phase.baseline': '1. Check the current level',
+  'app.phase.weakness': '2. Practice a weak point',
+  'app.phase.transfer': '3. Transfer to an unseen text',
+  'app.phase.reassessment': '4. Weekly reassessment',
+  'app.phase.pending': 'Upcoming',
+  'app.phase.active': 'Current',
+  'app.phase.scheduled': 'Waiting for reassessment',
+  'app.phase.done': 'Done',
+  'app.phase.progress': '{done}/{goal}',
+  'app.phase.next_date': 'Reassess from {date}',
+  'app.train.title': 'Practice',
+  'app.train.lead': 'Repeat the four-step cycle, or open any tool below whenever you need it.',
+  'app.train.cycle': 'Current training cycle',
+  'app.train.library': 'All practice tools',
+  'app.train.library_help': 'Nothing is locked. The four steps are a recommended order; the library is always open.',
+  'app.category.core': 'Core practice',
+  'app.category.language_support': 'Language support',
+  'app.category.practice': 'Practice and experiments',
+  'app.category.tool': 'Practical tools',
+  'app.mytexts.title': 'My texts',
+  'app.mytexts.lead': 'Paste an English or Chinese text you are reading. Auto-generated questions are unvalidated and never affect headline results.',
+  'app.mytexts.form_title': 'Save a new text',
+  'app.mytexts.title_label': 'Title',
+  'app.mytexts.title_placeholder': 'Title is optional',
+  'app.mytexts.body_label': 'Text',
+  'app.mytexts.body_placeholder.en': 'Paste a paragraph from an English book or paper.',
+  'app.mytexts.body_placeholder.zh': 'Paste a paragraph from a Chinese book or paper.',
+  'app.mytexts.limit': 'Up to 100,000 characters per text and 1,000,000 total. Current input: {count}.',
+  'app.mytexts.saved': 'Saved texts',
+  'app.mytexts.empty': 'No saved texts yet.',
+  'app.mytexts.remove': 'Remove this text from browser storage?',
+  'app.mytexts.remove_label': 'Remove text',
+  'app.mytexts.read': 'Check rate and comprehension',
+  'app.mytexts.conquer': 'Repeated-reading practice',
+  'app.mytexts.triage': 'Three-pass paper tool',
+  'app.mytexts.privacy': 'Pasted texts stay in this browser. The app screen loads no third-party analytics script.',
+  'app.custom.title': 'Read my text',
+  'app.custom.instructions': 'Read normally. An automatically generated cloze check follows.',
+  'app.custom.finish': 'Finished · check comprehension',
+  'app.custom.quiz': 'Automatic self-check',
+  'app.custom.result': 'Automatic questions do not affect the headline rate or difficulty suggestion.',
+  'app.custom.no_quiz': 'No automatic questions could be generated, so only the rate was stored.',
+  'app.progress.title': 'Progress',
+  'app.progress.lead': 'Rate and comprehension stay separate. Only performance that holds on unseen text contributes to the headline.',
+  'app.progress.headline': 'Maintained-comprehension rate',
+  'app.progress.headline_note': 'Median of recent unseen, unassisted attempts with at least 80% comprehension',
+  'app.progress.transfer': 'Unseen-transfer median',
+  'app.progress.transfer_note': '{qualified}/{total} attempts at 80% comprehension or higher',
+  'app.progress.accuracy': 'Recent accurate reading',
+  'app.progress.rate': 'Reading rate',
+  'app.progress.comprehension': 'Comprehension',
+  'app.progress.rate_curve': 'Rate over time',
+  'app.progress.comp_curve': 'Comprehension over time',
+  'app.progress.question_types': 'Accuracy by question type',
+  'app.progress.main_idea': 'Main idea',
+  'app.progress.inference': 'Inference',
+  'app.progress.detail': 'Detail',
+  'app.progress.other': 'Other questions',
+  'app.progress.mode_results': 'Results by reading goal',
+  'app.progress.mode.accuracy': 'Read accurately',
+  'app.progress.mode.gist': 'Get the gist',
+  'app.progress.mode.locate': 'Locate information',
+  'app.progress.adjustment': 'Next adjustment',
+  'app.progress.adjust.increase': 'Comprehension held twice with low fatigue. Raise the next target rate by about 5%.',
+  'app.progress.adjust.hold': 'Keep rate and difficulty steady while collecting more attempts.',
+  'app.progress.adjust.decrease': 'Comprehension was below 60% or fatigue was high. Lower only the rate next time.',
+  'app.progress.total': '{count} completed v3 attempts',
+  'app.progress.legacy': 'Legacy records remain in the backup but do not drive the new headline or cycle.',
+  'app.settings.title': 'Settings',
+  'app.settings.lead': 'Interface and practice languages are separate. You can also adjust the reading display and timers.',
+  'app.settings.language': 'Languages',
+  'app.settings.ui_language': 'Interface language',
+  'app.settings.training_language': 'Practice language',
+  'app.settings.korean': '한국어',
+  'app.settings.english': 'English',
+  'app.settings.difficulty': 'App difficulty',
+  'app.settings.difficulty_help': 'A text-load scale from 1 to 6, not a language certificate level.',
+  'app.settings.display': 'Reading display',
+  'app.settings.font_size': 'Text size',
+  'app.settings.line_height': 'Line spacing',
+  'app.settings.width': 'Reading width',
+  'app.settings.reduce_motion': 'Reduce motion',
+  'app.settings.timer': 'Timer',
+  'app.settings.timer_visible': 'Show elapsed time while reading',
+  'app.settings.gist_seconds': 'Default gist time',
+  'app.settings.seconds': '{value} sec',
+  'app.settings.theme': 'Color theme',
+  'app.settings.auto': 'Auto',
+  'app.settings.light': 'Light',
+  'app.settings.dark': 'Dark',
+  'app.settings.data': 'Data',
+  'app.settings.data_help': 'Records and pasted texts stay in this browser. Move a backup file when changing devices.',
+  'app.settings.export': 'Export backup',
+  'app.settings.import': 'Import backup',
+  'app.settings.imported': 'Backup imported.',
+  'app.settings.import_failed': 'Could not import the backup: {reason}',
+  'app.settings.reset_progress': 'Reset training records',
+  'app.settings.reset_progress_confirm': 'Reset new and legacy training records? Pasted texts and settings will remain.',
+  'app.settings.reset_all': 'Erase all local data',
+  'app.settings.reset_all_confirm1': 'Erase all ReadFast data in this browser, including pasted texts?',
+  'app.settings.reset_all_confirm2': 'This cannot be undone. Erase it?',
+  'app.settings.install': 'Install the app',
+  'app.settings.install_help': 'After the first successful load, an installed app can also work offline.',
+  'app.settings.install_button': 'Install',
+  'app.settings.install_manual': 'On a phone, use “Add to Home Screen.” On desktop, use the install icon in the address bar.',
+  'app.settings.privacy': 'Privacy and pasted texts',
+  'app.settings.privacy_body': 'The app has no account or server storage. Pasted texts remain in this browser, and the app screen contains no third-party analytics JavaScript.',
+  'app.settings.about': 'About',
+  'app.settings.about_body': 'Materials researcher Seunghoon Choi built ReadFast for reading English and Chinese texts. It records rate and comprehension separately and checks them again on unseen text.',
+  'app.settings.source': 'Source code',
+  'app.settings.principles': 'Principles and sources',
+});
+
+const m = (key, params) => t('app.' + key, params || {});
 const view = $('#view');
+const ROUTES = ['home', 'train', 'mytexts', 'progress', 'theory', 'settings'];
+const TAB_ICON = { home: 'today', train: 'train', mytexts: 'mytexts', progress: 'progress', theory: 'theory' };
 let lang = store.getSetting('lang') || 'en';
 let route = 'home';
 let drillActive = false;
-
-const ROUTES = ['home', 'train', 'mytexts', 'progress', 'theory', 'settings'];
-const TAB_ICON = { home: 'today', train: 'train', mytexts: 'mytexts', progress: 'progress', theory: 'theory' };
-const DAILY_GOAL = 3;
-
-/* ---------- PWA install prompt ---------- */
 let installPrompt = null;
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt = e; });
 
-/* ---------- theme ---------- */
-function resolveTheme() {
-  const t = store.getSetting('theme');
-  if (t === 'light' || t === 'dark') return t;                                  // explicit choice
-  return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
-}
-function paintThemeToggle(t) {
-  const btn = $('#themeToggle');
-  if (!btn) return;
-  // 현재 테마를 나타내는 아이콘 (다크면 달, 라이트면 해) — 아이콘 시스템(js/icons.js)으로 통일
-  btn.innerHTML = iconSvg(t === 'dark' ? 'moon' : 'sun');
-  btn.setAttribute('title', t === 'dark' ? '밝게 전환' : '어둡게 전환');
-}
-function applyTheme() {
-  const t = resolveTheme();
-  document.documentElement.setAttribute('data-theme', t);
-  document.querySelector('meta[name=theme-color]')?.setAttribute('content', t === 'dark' ? '#14181d' : '#FCFBF9');
-  paintThemeToggle(t);
-}
-$('#themeToggle').addEventListener('click', () => {
-  store.setSetting('theme', (resolveTheme() === 'dark') ? 'light' : 'dark');
-  applyTheme();
+window.addEventListener('beforeinstallprompt', event => {
+  event.preventDefault();
+  installPrompt = event;
 });
-// follow system changes while the user is on "auto" (no explicit choice yet)
-if (window.matchMedia) {
-  const mq = window.matchMedia('(prefers-color-scheme: dark)');
-  mq.addEventListener?.('change', () => { const t = store.getSetting('theme'); if (t !== 'light' && t !== 'dark') applyTheme(); });
+
+function unitLabel(value = lang) {
+  return m(value === 'zh' ? 'unit.zh' : 'unit.en');
 }
 
-/* ---------- leaving guard: 진행 중 드릴 보호 ---------- */
-function confirmLeave() {
-  if (!drillActive) return true;
-  const ok = confirm('진행 중인 훈련을 중단할까요? 이번 시도 기록은 저장되지 않습니다.');
-  if (ok) { runTeardown(); drillActive = false; }
-  return ok;
+function locale() {
+  return getUILang() === 'ko' ? 'ko-KR' : 'en-US';
 }
 
-/* ---------- language ---------- */
-$$('.seg__btn').forEach(b => b.addEventListener('click', () => {
-  if (b.dataset.lang === lang) return;
-  if (!confirmLeave()) return;
-  lang = b.dataset.lang; store.setSetting('lang', lang);
-  $$('.seg__btn').forEach(x => x.classList.toggle('is-active', x.dataset.lang === lang));
-  render();
-}));
+function formatDate(value) {
+  if (!value) return '';
+  return new Intl.DateTimeFormat(locale(), { month: 'short', day: 'numeric' }).format(new Date(value));
+}
 
-/* ---------- routing ---------- */
-$$('.tab').forEach(t => t.addEventListener('click', () => go(t.dataset.route)));
-function syncTabs() {
-  $$('.tab').forEach(t => {
-    const active = t.dataset.route === route;
-    t.classList.toggle('is-active', active);
-    if (active) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
+function resolveTheme() {
+  const setting = store.getSetting('theme');
+  if (setting === 'light' || setting === 'dark') return setting;
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function paintThemeToggle(theme) {
+  const button = $('#themeToggle');
+  if (!button) return;
+  button.innerHTML = iconSvg(theme === 'dark' ? 'moon' : 'sun');
+  button.setAttribute('title', m(theme === 'dark' ? 'theme.light' : 'theme.dark'));
+}
+
+function applyTheme() {
+  const theme = resolveTheme();
+  document.documentElement.dataset.theme = theme;
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', theme === 'dark' ? '#14181d' : '#FCFBF9');
+  paintThemeToggle(theme);
+}
+
+function applyReadingSettings() {
+  const root = document.documentElement;
+  const fontSize = Number(store.getSetting('readerFontSize')) || 20;
+  const lineHeight = Number(store.getSetting('readerLineHeight')) || 1.75;
+  const width = Number(store.getSetting('readerWidth')) || 68;
+  root.style.setProperty('--reading-font-size', fontSize + 'px');
+  root.style.setProperty('--reading-zh-font-size', Math.round(fontSize * 1.08) + 'px');
+  root.style.setProperty('--reading-line-height', String(lineHeight));
+  root.style.setProperty('--reading-zh-line-height', String(Math.max(lineHeight, 1.8)));
+  root.style.setProperty('--reading-width', width + 'ch');
+  root.dataset.reduceMotion = store.getSetting('reduceMotion') ? 'true' : 'false';
+  root.dataset.timerVisible = store.getSetting('timerVisible') === false ? 'false' : 'true';
+}
+
+function refreshMeta() {
+  document.title = getUILang() === 'ko'
+    ? '리드패스트 | 읽기 속도와 이해 훈련'
+    : 'ReadFast | Reading Rate and Comprehension Practice';
+}
+
+function paintTabIcons() {
+  $$('.tab').forEach(tab => {
+    const target = tab.querySelector('.tab__ico');
+    if (target && TAB_ICON[tab.dataset.route]) target.innerHTML = iconSvg(TAB_ICON[tab.dataset.route]);
+  });
+  const logo = $('.appbar__logo');
+  if (logo) logo.innerHTML = iconSvg('brand');
+  const gear = $('#settingsBtn');
+  if (gear) gear.innerHTML = iconSvg('gear');
+}
+
+function syncTrainingLanguage() {
+  $$('.seg__btn[data-lang]').forEach(button => {
+    setPressed(button, button.dataset.lang === lang);
+    button.classList.toggle('is-active', button.dataset.lang === lang);
   });
 }
 
-window.addEventListener('hashchange', () => {
-  const r = location.hash.slice(1);
-  if (ROUTES.includes(r) && r !== route) {
-    if (!confirmLeave()) { try { location.hash = route; } catch {} return; }
-    route = r; syncTabs(); render();
+function syncTabs() {
+  $$('.tab').forEach(tab => {
+    const active = tab.dataset.route === route;
+    tab.classList.toggle('is-active', active);
+    if (active) tab.setAttribute('aria-current', 'page');
+    else tab.removeAttribute('aria-current');
+  });
+}
+
+function confirmLeave() {
+  if (!drillActive) return true;
+  const approved = confirm(m('leave'));
+  if (approved) {
+    runTeardown();
+    drillActive = false;
   }
+  return approved;
+}
+
+window.addEventListener('beforeunload', event => {
+  if (!drillActive) return;
+  event.preventDefault();
+  event.returnValue = '';
 });
 
-// brand → home
-const brandEl = $('.appbar__brand');
-if (brandEl) {
-  brandEl.addEventListener('click', () => go('home'));
-  brandEl.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go('home'); } });
+function go(next) {
+  if (!ROUTES.includes(next)) return;
+  if (drillActive && !confirmLeave()) return;
+  route = next;
+  if (location.hash.slice(1) !== next) location.hash = next;
+  syncTabs();
+  render();
 }
-const settingsBtn = $('#settingsBtn');
-if (settingsBtn) settingsBtn.addEventListener('click', () => go('settings'));
 
 function render() {
-  runTeardown(); drillActive = false;
-  clear(view); view.scrollTop = 0; window.scrollTo(0, 0);
+  if (store.getLoadIssue()) return renderRecoveryScreen();
+  document.body.classList.remove('recovery-mode');
+  runTeardown();
+  drillActive = false;
+  clear(view);
+  window.scrollTo(0, 0);
   if (route === 'home') renderHome();
   else if (route === 'train') renderTrain();
   else if (route === 'mytexts') renderMyTexts();
   else if (route === 'progress') renderProgress();
   else if (route === 'theory') renderTheory(view);
-  else if (route === 'settings') renderSettings();
+  else renderSettings();
+  translateDocument(view);
+  view.focus({ preventScroll: true });
 }
 
-function go(r) {
-  if (r !== route && !confirmLeave()) return;
-  route = r;
-  if (location.hash.slice(1) !== r) { try { location.hash = r; } catch {} }
-  syncTabs(); render();
-}
-
-/* ---------- catalog (shared by 훈련) ---------- */
-// only render drills valid for the active language — no cross-language disabled clutter.
-function catalogBlocks() {
-  return TRACKS.map(track => {
-    const ds = DRILLS.filter(d => d.track === track && d.langs.includes(lang));
-    if (!ds.length) return null;
-    const tiles = ds.map(d => h('button', { class: 'tile', onClick: () => launch(d) },
-      h('div', { class: 'tile__top' },
-        h('span', { class: 'iconchip' }, icon(DRILL_ICON[d.id] || d.id)),
-        h('span', { class: 'tile__name' }, d.name)),
-      h('span', { class: 'tile__goal' }, d.goal)));
-    return h('div', null, h('p', { class: 'track-label' }, track), h('div', { class: 'tiles' }, ...tiles));
-  }).filter(Boolean);
-}
-
-/* ---------- today's session ---------- */
-function sessionDoneToday(drillId) {
-  return store.sessionsToday().some(s => s.drill === drillId || s.drill.startsWith(drillId + '-'));
-}
-// 레이더 최약축 → 처방 드릴 매핑 (A2). 현재 레벨에서 열린(unlocked) 드릴만 후보.
-// 어휘→vocab / 속도→err / 이해→err·context / 유지·전이→repeated / 전략→modes·preview·triage
-const WEAKNESS_DRILLS = {
-  '어휘': ['vocab'],
-  '속도': ['err'],
-  '이해': ['err', 'context'],
-  '유지·전이': ['repeated'],
-  '전략': ['modes', 'preview', 'triage', 'retrieval'],
-};
-// 최약축에 대응하며 지금 열려 있고 이 언어에 유효한 드릴 하나를 고른다. 없으면 null.
-function weaknessDrillFor(lng, unlockedIds) {
-  const valid = id => DRILL_BY_ID[id] && DRILL_BY_ID[id].langs.includes(lng);
-  const skills = skillProfile(lng);
-  if (skills.every(s => s.val === 0)) return null; // 데이터 없으면 처방 없음
-  const weakest = skills.slice().sort((a, b) => a.val - b.val)[0];
-  const cands = (WEAKNESS_DRILLS[weakest.name] || []).filter(id => unlockedIds.includes(id) && valid(id));
-  return cands.length ? { drill: cands[0], axis: weakest.name } : null;
-}
-
-// 오늘의 코스: 도장깨기 경로에서 파생 — 워밍업(커버리지) → 지금 도전 단계 → 약점축 처방.
-// 반환: { ids:[...], weakness:{drill,axis}|null }  (weakness.drill이 코스에 실제로 들어갔을 때만 라벨 표시)
-function pickSession(lng) {
-  const valid = id => DRILL_BY_ID[id] && DRILL_BY_ID[id].langs.includes(lng);
-  const prog = progressionPath(lng);
-  const unlocked = prog.stages.filter(s => s.unlocked).map(s => s.drillId).filter(valid);
-  const active = prog.stages.find(s => !s.cleared);
-  const out = [];
-  // 1) 워밍업 — 커버리지(어휘)가 열려 있으면 항상 먼저
-  if (unlocked.includes('vocab')) out.push('vocab');
-  // 2) 도전 — 지금 깨야 할 단계
-  if (active && valid(active.drillId)) out.push(active.drillId);
-  // 3) 약점 보강 (A2) — 레이더 최약축에 대응하는 열린 드릴 1칸. 레이더 '집중' 라벨이 실제 처방으로 이어지게.
-  const weakness = weaknessDrillFor(lng, unlocked);
-  if (weakness) out.push(weakness.drill);
-  // 4) 유지 — 이미 정복한 드릴을 날짜 로테이션 (실력 유지·간격 복습)
-  const cleared = prog.stages.filter(s => s.cleared && s.drillId !== 'vocab').map(s => s.drillId).filter(valid);
-  if (cleared.length) out.push(cleared[new Date().getDate() % cleared.length]);
-  // 전부 정복(완성) 상태 — 코어·전략 다양성 로테이션으로 유지 훈련
-  if (!active) {
-    const core = ['conquer', 'err', 'repeated'].filter(valid);
-    if (core.length) out.push(core[new Date().getDate() % core.length]);
-    const strat = ['retrieval', 'modes', 'preview', 'triage'].filter(valid);
-    if (strat.length) out.push(strat[(new Date().getDate() + 1) % strat.length]);
-  }
-  const ids = [...new Set(out)].slice(0, 3);
-  // 약점 드릴이 최종 3칸 안에 실제로 남았을 때만 라벨링
-  const weaknessFinal = weakness && ids.includes(weakness.drill) ? weakness : null;
-  return { ids, weakness: weaknessFinal };
-}
-
-function goalRing(done, goal) {
-  const ns = 'http://www.w3.org/2000/svg';
-  const r = 20, c = 2 * Math.PI * r, frac = Math.min(1, goal ? done / goal : 0);
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('class', 'ring'); svg.setAttribute('width', '54'); svg.setAttribute('height', '54'); svg.setAttribute('viewBox', '0 0 54 54');
-  svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', `오늘 ${Math.min(done, goal)}/${goal} 세션`);
-  const mk = (cls, extra) => { const e = document.createElementNS(ns, 'circle'); e.setAttribute('class', cls); e.setAttribute('cx', '27'); e.setAttribute('cy', '27'); e.setAttribute('r', r); e.setAttribute('stroke-width', '5'); if (extra) extra(e); return e; };
-  const val = mk('ring__val', e => { e.setAttribute('stroke-dasharray', c.toFixed(1)); e.setAttribute('stroke-dashoffset', (c * (1 - frac)).toFixed(1)); e.setAttribute('transform', 'rotate(-90 27 27)'); });
-  const txt = document.createElementNS(ns, 'text');
-  txt.setAttribute('class', 'ring__txt'); txt.setAttribute('x', '27'); txt.setAttribute('y', '28'); txt.setAttribute('text-anchor', 'middle'); txt.setAttribute('dominant-baseline', 'central'); txt.setAttribute('font-size', '14');
-  txt.textContent = `${Math.min(done, goal)}/${goal}`;
-  svg.append(mk('ring__track'), val, txt);
-  return svg;
-}
-
-/* ---------- ONBOARDING: 첫 실행 레벨 선택 ---------- */
-function renderOnboarding() {
-  const cards = LEVEL_ORDER.map(key => {
-    const lv = LEVELS[key];
-    return h('button', { class: 'levelcard', onClick: () => { store.setLevel(lang, key); render(); } },
-      h('div', { class: 'levelcard__top' },
-        h('span', { class: 'levelcard__name' }, lv.label),
-        h('span', { class: 'levelcard__sub' }, lv.sub[lang])),
-      h('span', { class: 'levelcard__desc' }, lv.desc));
-  });
-  mount(view, h('div', { class: 'fade-in' },
-    h('div', { class: 'hero', style: { marginBottom: '16px' } },
-      h('div', { class: 'hero__eyebrow' }, icon('level', { size: 15 }), '시작하기 · 1분'),
-      h('div', { class: 'hero__name', style: { fontSize: '1.2rem' } },
-        (lang === 'zh' ? '중국어' : '영어') + ' 읽기, 지금 어느 정도인가요?'),
-      h('div', { class: 'hero__goal' }, '레벨에 맞춰 지문 난이도·훈련 속도·어휘가 정해집니다. 언제든 설정에서 바꿀 수 있고, 훈련하다 보면 앱이 레벨 올리기를 제안합니다.')),
-    h('div', { class: 'levelgrid' }, ...cards),
-    h('div', { class: 'card card--recommend', style: { marginTop: '14px' } },
-      h('p', { class: 'eyebrow eyebrow--latin' }, 'RECOMMENDED'),
-      h('div', { class: 'row spread' },
-        h('div', null,
-          h('b', null, '잘 모르겠어요 — 3분 수준 측정으로 정확히'),
-          h('div', { class: 'small muted' }, '짧은 지문 하나를 읽고 이해 문제를 풀면, 결과로 레벨을 추천해 드립니다 (약 3분).')),
-        h('button', { class: 'btn btn--primary', onClick: placement }, '수준 측정')),
-      h('p', { class: 'small muted', style: { marginTop: '10px' } },
-        '이 앱은 속독 미신(시야 확장, 1만 WPM) 없이, 근거가 검증된 방법만 씁니다 — 자세한 근거는 「원리」 탭에.'))));
-}
-
-// 배치 테스트: 중간 난이도(티어 3) 지문 1편 → ERR 측정 → 레벨 추천 (기준선 기록으로도 저장)
-function placement() {
-  const p = content.passagesFor(lang, 3).length ? content.pickPassage(lang, 3) : content.pickPassage(lang, null);
-  if (!p) { alert('지문 데이터를 불러오지 못했습니다.'); return; }
-  store.markSeen(p.id);
-  const units = p.unit_count || countUnits(p.text, lang);
-  const timerEl = h('span', { class: 'hud__timer' }, '0:00');
-  const t = startTimer(ms => timerEl.textContent = fmtClock(ms));
-  drillActive = true;
-  setTeardown(() => t.stop());
-  const done = () => {
-    const ms = t.stop();
-    const wpm = units / (ms / 60000);
-    const host = h('div');
-    mount(view, h('div', { class: 'hud' }, h('span', { class: 'chip' }, '수준 측정 · 이해 확인')), host);
-    compQuiz(host, (p.questions || []).slice()).then(res => {
-      drillActive = false;
-      const comp = res.frac;
-      const err = comp < 0.6 ? 0 : Math.round(wpm * comp);
-      store.addErr(lang, { tier: 3, units, wpm: Math.round(wpm), comp, err, mode: 'full' });
-      if (comp >= 0.6) store.seedPace(lang, 3, wpm);
-      const rec = recommendLevel(comp, wpm, lang);
-      const lv = LEVELS[rec];
-      mount(view, h('div', { class: 'card fade-in center' },
-        h('p', { class: 'eyebrow' }, '수준 측정 결과'),
-        h('div', { class: 'stat-row', style: { justifyContent: 'center' } },
-          h('div', { class: 'stat', style: { alignItems: 'center' } }, h('span', { class: 'stat__num' }, Math.round(wpm) + ''), h('span', { class: 'stat__lbl' }, lang === 'zh' ? '자/분' : 'WPM')),
-          h('div', { class: 'stat', style: { alignItems: 'center' } }, h('span', { class: 'stat__num' }, Math.round(comp * 100) + '%'), h('span', { class: 'stat__lbl' }, '이해도'))),
-        h('div', { class: 'note note--good', style: { textAlign: 'left', marginTop: '8px' } },
-          `추천 레벨: `, h('b', null, `${lv.label} (${lv.sub[lang]})`), ` — ${lv.desc}`),
-        h('div', { class: 'btnrow', style: { justifyContent: 'center', marginTop: '14px' } },
-          h('button', { class: 'btn btn--primary btn--lg', onClick: () => { store.setLevel(lang, rec); go('home'); } }, `${lv.label}로 시작`),
-          h('button', { class: 'btn btn--ghost', onClick: () => { render(); } }, '직접 고르기'))));
-    });
-  };
-  mount(view,
-    h('div', { class: 'hud' },
-      h('span', { class: 'chip' }, `수준 측정 · ${units}${lang === 'zh' ? '자' : '단어'}`), timerEl),
-    h('div', { class: 'note small' }, '평소처럼 읽으세요. 빨리 읽으려고 무리하지 않아도 됩니다 — 다 읽으면 이해 문제가 나옵니다.'),
-    h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'eyebrow' }, p.title || '지문'),
-      h('div', { class: 'reader', lang: lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': lang }, h('div', { class: 'reader-wrap' }, p.text))),
-    h('div', { class: 'btnrow', style: { marginTop: '12px' } },
-      h('button', { class: 'btn btn--primary btn--lg', onClick: done }, '다 읽었어요 → 이해 확인')));
-}
-
-/* ---------- HOME = 오늘 ---------- */
-function renderHome() {
-  if (!store.getLevel(lang)) return renderOnboarding();
-  const errFull = store.errSeries(lang, 'full');
-  const lastErr = errFull.length ? errFull[errFull.length - 1].err : null;
-  const streak = store.getState().streak;
-  const todayN = store.sessionsToday().length;
-  const hasBaseline = errFull.length > 0;
-  const lv = levelOf(store.getLevel(lang));
-
-  const status = h('div', { class: 'today-status' },
-    goalRing(todayN, DAILY_GOAL),
-    h('div', { class: 'status-metrics' },
-      h('div', { class: 'metric' },
-        h('span', { class: 'metric__num' }, icon('flame', { size: 18 }), String(streak.count)),
-        h('span', { class: 'metric__lbl' }, '연속일')),
-      h('div', { class: 'metric' },
-        h('span', { class: 'metric__num' }, lastErr != null ? String(lastErr) : '—'),
-        h('span', { class: 'metric__lbl', title: 'ERR(유효 읽기속도) = 속도 × 이해율' }, lang === 'zh' ? 'ERR · 자/분' : 'ERR · WPM')),
-      h('div', { class: 'metric' },
-        h('span', { class: 'metric__num' }, String(todayN)),
-        h('span', { class: 'metric__lbl' }, '오늘 세션'))),
-    h('button', { class: 'level-pill', title: '레벨 바꾸기 (설정)', onClick: () => go('settings') },
-      icon('level', { size: 14 }), lv.label));
-
-  // A3 복귀 훅: 오늘 복습할 어휘 카드 배지 (0이면 숨김) — 클릭 시 어휘 드릴 진입
-  const dueN = store.dueCardCount(lang);
-  const dueBadge = dueN > 0
-    ? h('button', { class: 'due-badge', title: '잊히기 전에 복습하세요 — 어휘 카드로 이동', onClick: () => launch(DRILL_BY_ID['vocab']) },
-        icon('cards', { size: 16 }),
-        h('span', { class: 'due-badge__txt' }, '오늘 복습할 어휘 카드 ', h('b', null, String(dueN)), '장'),
-        icon('chevron', { size: 15, cls: 'due-badge__chev' }))
-    : null;
-
-  const picked = pickSession(lang);
-  const session = picked.ids;
-  const weakness = picked.weakness; // {drill, axis} | null
-  const doneFlags = session.map(sessionDoneToday);
-  let activeIdx = doneFlags.findIndex(d => !d);
-  const allDone = activeIdx === -1;
-  if (allDone) activeIdx = Math.max(0, session.length - 1);
-
-  let heroNode, label;
-  if (!hasBaseline) {
-    const errDrill = DRILL_BY_ID['err'];
-    label = '시작하기';
-    heroNode = h('div', { class: 'hero' },
-      h('div', { class: 'hero__eyebrow' }, icon('today', { size: 15 }), label),
-      h('div', { class: 'hero__row' },
-        h('span', { class: 'iconchip iconchip--lg iconchip--on' }, icon('err')),
-        h('div', { class: 'hero__body' },
-          h('div', { class: 'hero__name' }, '기준선 측정'),
-          h('div', { class: 'hero__goal' }, '훈련 전에 지금의 읽기 속도·이해를 한 번 정직하게 잽니다. 이후 모든 향상은 이 기준과 비교합니다.'))),
-      h('button', { class: 'hero__cta', onClick: () => launch(errDrill) }, icon('play'), '내 속도·이해 측정하기'));
-  } else {
-    const active = DRILL_BY_ID[session[activeIdx]] || DRILL_BY_ID['err'];
-    label = allDone ? '오늘 훈련 완료 · 한 번 더?' : '오늘의 훈련';
-    heroNode = h('div', { class: 'hero' },
-      h('div', { class: 'hero__eyebrow' }, icon('today', { size: 15 }), label),
-      h('div', { class: 'hero__row' },
-        h('span', { class: 'iconchip iconchip--lg iconchip--on' }, icon(DRILL_ICON[active.id] || active.id)),
-        h('div', { class: 'hero__body' },
-          h('div', { class: 'hero__name' }, active.name),
-          h('div', { class: 'hero__goal' }, active.goal))),
-      h('button', { class: 'hero__cta', onClick: () => launch(active) }, icon('play'),
-        allDone ? '다시 훈련' : (activeIdx === 0 ? '오늘 훈련 시작' : '이어서 훈련')));
-  }
-
-  const steps = session.map((id, i) => {
-    const d = DRILL_BY_ID[id]; const done = doneFlags[i];
-    const isWeak = weakness && weakness.drill === id;
-    const cls = 'step' + (done ? ' step--done' : (hasBaseline && i === activeIdx ? ' step--active' : ''));
-    return h('button', { class: cls, onClick: () => launch(d) },
-      h('span', { class: 'step__num' }, done ? icon('check', { size: 15 }) : String(i + 1)),
-      h('div', { class: 'step__body' },
-        h('div', { class: 'step__name' },
-          d.name,
-          isWeak ? h('span', { class: 'step__tag' }, icon('target', { size: 12 }), '약점 보강: ' + weakness.axis) : null),
-        h('div', { class: 'step__meta' }, done ? '완료' : d.track)),
-      icon('chevron', { size: 18, cls: 'step__chev' }));
-  });
-
-  mount(view, h('div', { class: 'fade-in' },
-    status,
-    dueBadge,
-    h('p', { class: 'track-label', style: { marginTop: '16px' } }, hasBaseline ? '오늘의 훈련' : '먼저 · 기준선'),
-    heroNode,
-    !hasBaseline ? h('p', { class: 'track-label' }, '측정 후 · 오늘의 코스') : null,
-    h('div', { class: 'session' + (hasBaseline ? '' : ' session--preview'), style: { marginTop: '12px' } }, ...steps),
-    content.data().isSeed ? h('div', { class: 'note note--warn', style: { marginTop: '12px' } }, '※ 콘텐츠 데이터를 못 불러와 내장 샘플로 동작 중입니다.') : null,
-    h('div', { class: 'linkrow' },
-      h('a', { href: '#theory', onClick: e => { e.preventDefault(); go('theory'); } }, icon('theory', { size: 16 }), '왜 이 순서로 훈련하나 — 원리'),
-      h('a', { href: '#settings', onClick: e => { e.preventDefault(); go('settings'); } }, icon('gear', { size: 16 }), '레벨·설정'),
-      installPrompt ? h('a', { href: '#', onClick: e => { e.preventDefault(); installPrompt.prompt(); } }, icon('install', { size: 16 }), '앱으로 설치') : null)));
-}
-
-/* ---------- TRAIN = 도장깨기 정복 경로 ---------- */
-function renderTrain() {
-  // 목록형 보기 — 설정에서 전환 가능(잠금은 어디에도 없음, 보기 방식만 다름)
-  if (store.getSetting('freePlay')) {
-    mount(view, h('div', { class: 'fade-in' },
-      h('h1', { class: 'h1' }, '훈련 · 전체 목록'),
-      h('p', { class: 'lead' }, '모든 드릴을 카탈로그로 봅니다. ',
-        h('a', { href: '#settings', class: 'plainlink', onClick: e => { e.preventDefault(); go('settings'); } }, '설정에서 정복 경로 보기로 되돌리기')),
-      ...catalogBlocks()));
-    return;
-  }
-
-  const prog = progressionPath(lang);
-  const activeIdx = prog.stages.findIndex(s => !s.cleared);
-
-  const header = h('div', { class: 'quest-head' },
-    h('div', { class: 'quest-head__row' },
-      h('div', null,
-        h('div', { class: 'eyebrow' }, (lang === 'en' ? 'ENGLISH' : '中文') + ' · ' + levelOf(prog.level).label + ' 도장'),
-        h('h1', { class: 'h1', style: { margin: 0 } }, '정복 경로'),
-        h('p', { class: 'small muted', style: { margin: '6px 0 0' } }, '위에서 아래가 권장 순서 — 어느 단계든 바로 도전할 수 있고, 기준을 통과하면 도장이 찍힙니다. 전부 정복하면 레벨 승급 — 최상급까지 깨면 완성.')),
-      h('div', { class: 'quest-head__score' },
-        h('span', { class: 'quest-head__num' }, `${prog.clearedCount}`),
-        h('span', { class: 'quest-head__den' }, `/ ${prog.total} 정복`))),
-    h('div', { class: 'bar', style: { marginTop: '12px' } },
-      h('div', { class: 'bar__fill', style: { width: Math.round(prog.clearedCount / prog.total * 100) + '%' } })));
-
-  const stageCards = prog.stages.map((s, i) => {
-    const d = DRILL_BY_ID[s.drillId];
-    const isActive = i === activeIdx;
-    // 잠금 없음(2026-07-06): 순서는 권장 경로 표시일 뿐, 전 단계가 항상 도전 가능.
-    const state = s.cleared ? 'clear' : 'active';
-    const pct = Math.round(Math.min(1, s.cur / s.goal) * 100);
-    const isFinal = i === prog.stages.length - 1;
-    return h('div', { class: `quest quest--${state}` + (isFinal ? ' quest--final' : '') },
-      h('div', { class: 'quest__badge' },
-        s.cleared ? icon('check', { size: 16 }) : String(s.idx)),
-      h('div', { class: 'quest__body' },
-        h('div', { class: 'quest__top' },
-          h('span', { class: 'iconchip quest__chip' }, icon(DRILL_ICON[s.drillId] || 'dot')),
-          h('div', { class: 'quest__names' },
-            h('div', { class: 'quest__name' }, (isFinal ? '최종 관문 · ' : '') + d.name),
-            h('div', { class: 'quest__state' },
-              s.cleared ? '정복' : (isActive ? '지금 도전' : '도전 가능'))),
-          h('button', { class: 'btn ' + (isActive ? 'btn--primary' : ''), onClick: () => launch(d) }, s.cleared ? '다시' : '도전')),
-        h('div', { class: 'quest__gate' }, '기준: ' + s.gate),
-        !s.cleared ? h('div', { class: 'quest__prog' },
-          h('div', { class: 'bar' }, h('div', { class: 'bar__fill', style: { width: pct + '%' } })),
-          h('span', { class: 'quest__detail' }, s.detail)) : null,
-        s.cleared ? h('div', { class: 'quest__detail quest__detail--clear' }, s.detail) : null));
-  });
-
-  // 레벨 정복 / 완성 카드
-  let finale = null;
-  if (prog.conquered) {
-    if (prog.nextLevel) {
-      const next = LEVELS[prog.nextLevel];
-      finale = h('div', { class: 'hero', style: { marginTop: '16px' } },
-        h('div', { class: 'hero__eyebrow' }, icon('level', { size: 15 }), '도장 정복'),
-        h('div', { class: 'hero__name' }, `${levelOf(prog.level).label} 도장을 전부 깼습니다`),
-        h('div', { class: 'hero__goal' }, `다음 도장: ${next.label} (${next.sub[lang]}) — 더 어려운 지문에서 같은 경로를 다시 정복합니다. 읽기 단계(정독·전이·정복)의 도장은 새 난이도 기준으로 다시 비워집니다.`),
-        h('button', { class: 'hero__cta', onClick: () => { if (confirm(`${next.label} 도장으로 승급할까요?`)) { store.setLevel(lang, prog.nextLevel); render(); } } }, icon('arrow'), `${next.label} 도장 입장`));
-    } else {
-      finale = h('div', { class: 'hero', style: { marginTop: '16px' } },
-        h('div', { class: 'hero__eyebrow' }, icon('check', { size: 15 }), '완성'),
-        h('div', { class: 'hero__name' }, '최상급 도장까지 전부 정복 — 완성입니다'),
-        h('div', { class: 'hero__goal' }, '여기서부터는 유지 모드입니다: 오늘의 코스로 감을 유지하고, 「내 글」에 실제 읽는 책·논문을 붙여넣어 실전 전이를 이어가세요. 향상은 언제나 새 지문에서만 진짜입니다.'));
-    }
-  }
-
-  mount(view, h('div', { class: 'fade-in' },
-    header,
-    h('div', { class: 'quest-path' }, ...stageCards),
-    finale,
-    h('div', { class: 'linkrow' },
-      h('a', { href: '#theory', onClick: e => { e.preventDefault(); go('theory'); } }, icon('theory', { size: 16 }), '왜 이 순서인가 — 원리'),
-      h('a', { href: '#settings', onClick: e => { e.preventDefault(); go('settings'); } }, icon('gear', { size: 16 }), '전체 드릴 목록 보기(설정)'))));
-}
-
-function launch(drill) {
-  if (!confirmLeave()) return;
-  const from = (route === 'home' || route === 'train') ? route : 'train';
-  const exit = () => { runTeardown(); drillActive = false; route = from; syncTabs(); render(); };
+function renderRecoveryScreen() {
+  const issue = store.getLoadIssue();
+  if (!issue) return;
   runTeardown();
-  drillActive = true;
-  clear(view); window.scrollTo(0, 0);
-  drill.render(view, lang, exit);
+  drillActive = false;
+  document.body.classList.add('recovery-mode');
+  clear(view);
+  const raw = store.getCorruptBackupText();
+  const downloadRaw = () => {
+    if (typeof raw !== 'string') return;
+    const blob = new Blob([raw], { type: 'text/plain;charset=utf-8' });
+    const anchor = h('a', { href: URL.createObjectURL(blob), download: 'readfast-corrupt-backup.txt' });
+    document.body.append(anchor);
+    anchor.click();
+    URL.revokeObjectURL(anchor.href);
+    anchor.remove();
+  };
+  const startFresh = () => {
+    if (!confirm(m('recovery.confirm1')) || !confirm(m('recovery.confirm2'))) return;
+    try {
+      store.startFreshAfterCorruption();
+      location.reload();
+    } catch (error) {
+      alert(error.message || m('common.storage_error'));
+    }
+  };
+  mount(view, h('div', { class: 'fade-in recovery-panel' },
+    h('section', { class: 'card' },
+      h('h1', { class: 'h1' }, m('recovery.title')),
+      h('p', { class: 'lead' }, m('recovery.body')),
+      h('div', { class: 'note note--warn', role: 'alert' },
+        issue.recoveryKey
+          ? m('recovery.key', { key: issue.recoveryKey })
+          : m('recovery.key_unavailable')),
+      h('div', { class: 'btnrow', style: { marginTop: '16px' } },
+        h('button', { class: 'btn btn--primary', disabled: typeof raw !== 'string', onClick: downloadRaw }, m('recovery.download')),
+        h('button', { class: 'btn btn--ghost', onClick: startFresh }, m('recovery.start_fresh'))))));
+  translateDocument(view);
+  view.focus({ preventScroll: true });
 }
 
-/* ---------- MY TEXTS ---------- */
-function detectLang(text) { return /[㐀-鿿]/.test(text) ? 'zh' : 'en'; }
-
-function renderMyTexts() {
-  const ta = h('textarea', { placeholder: lang === 'zh' ? '책·논문의 중국어 단락을 붙여넣으세요…' : '책·논문의 영어 단락을 붙여넣으세요…' });
-  const titleIn = h('input', { type: 'text', placeholder: '제목(선택)' });
-  const save = () => {
-    const text = ta.value.trim(); if (text.length < 20) return;
-    const tl = detectLang(text);
-    store.addMyText({ title: titleIn.value.trim() || (text.slice(0, 24) + '…'), text, lang: tl, unit_count: countUnits(text, tl) });
-    ta.value = ''; titleIn.value = ''; renderMyTexts();
-  };
-
-  const list = store.myTexts();
-  const items = list.length ? list.map(t => h('div', { class: 'card' },
-    h('div', { class: 'row spread' },
-      h('div', null, h('b', null, t.title), h('div', { class: 'small muted' }, `${t.lang === 'zh' ? '中文' : 'EN'} · ${t.unit_count}${t.lang === 'zh' ? '자' : '단어'}`)),
-      h('button', { class: 'iconbtn', title: '삭제', 'aria-label': '삭제', onClick: () => { if (confirm(`'${t.title}' 글을 삭제할까요?`)) { store.removeMyText(t.id); renderMyTexts(); } } }, icon('trash', { size: 18 }))),
-    h('div', { class: 'btnrow', style: { marginTop: '10px' } },
-      h('button', { class: 'btn btn--primary', onClick: () => { clear(view); drillActive = true; conquer.render(view, t.lang, backToTexts, t); } }, '정복 모드'),
-      h('button', { class: 'btn', onClick: () => runCustomERR(t) }, '정독(ERR)'),
-      h('button', { class: 'btn', onClick: () => runCustomSVT(t) }, '문장 검증(SVT)'),
-      h('button', { class: 'btn', onClick: () => { clear(view); drillActive = true; triage.render(view, t.lang, backToTexts, t); } }, '논문 3-패스'),
-      h('button', { class: 'btn btn--ghost', onClick: () => runCustomRecall(t) }, '자기설명·인출'))))
-    : [h('div', { class: 'empty' }, '저장한 글이 없습니다. 위에 붙여넣어 보세요.')];
-
-  mount(view, h('div', { class: 'fade-in' },
-    h('h1', { class: 'h1' }, '내 글'),
-    h('p', { class: 'lead' }, '읽고 있는 책·논문 단락을 붙여넣으면 훈련 지문이 됩니다. 언어는 자동 감지됩니다.'),
-    h('div', { class: 'card' },
-      h('label', { class: 'field' }, '제목'), titleIn,
-      h('label', { class: 'field', style: { marginTop: '10px' } }, '본문'), ta,
-      h('div', { class: 'btnrow', style: { marginTop: '10px' } }, h('button', { class: 'btn btn--primary', onClick: save }, '저장')),
-      h('p', { class: 'small muted', style: { marginTop: '8px' } }, '※ 붙여넣은 글의 이해 문제는 자동 생성(빈칸 문제)이라 검증된 문항이 아닙니다. 자기 점검용으로 쓰세요.')),
-    h('p', { class: 'track-label' }, '저장한 글'),
-    ...items));
+function currentDifficulty(value = lang) {
+  return store.getDifficulty(value);
 }
 
-function backToTexts() { runTeardown(); drillActive = false; route = 'mytexts'; syncTabs(); renderMyTexts(); }
-
-function runCustomERR(t) {
-  clear(view); window.scrollTo(0, 0);
-  const units = t.unit_count || countUnits(t.text, t.lang);
-  const timerEl = h('span', { class: 'hud__timer' }, '0:00');
-  const timer = startTimer(ms => timerEl.textContent = fmtClock(ms));
-  drillActive = true;
-  setTeardown(() => timer.stop());
-  const done = () => {
-    const ms = timer.stop(); const wpm = units / (ms / 60000);
-    const items = content.autoCloze(t.text, t.lang, 4);
-    if (!items.length) return finish(wpm, null);
-    const host = h('div');
-    mount(view, h('div', null, h('div', { class: 'hud' }, h('span', { class: 'chip' }, '자동 빈칸 문제 (자기 점검)')), host));
-    compQuiz(host, items).then(res => finish(wpm, res.frac));
-  };
-  const finish = (wpm, comp) => {
-    drillActive = false;
-    const err = comp == null ? null : (comp < 0.6 ? 0 : Math.round(wpm * comp));
-    store.addErr(t.lang, { tier: 0, units, wpm: Math.round(wpm), comp: comp == null ? 0 : comp, err: err || 0, mode: comp == null ? 'speed-only' : 'full' });
-    store.logSession({ drill: 'mytext-err', lang: t.lang, err: err || 0 });
-    mount(view, h('div', { class: 'card fade-in center' },
-      h('p', { class: 'eyebrow' }, '결과'),
-      h('div', { class: 'stat-row', style: { justifyContent: 'center' } },
-        h('div', { class: 'stat', style: { alignItems: 'center' } }, h('span', { class: 'stat__num' }, comp == null ? Math.round(wpm) : (err + '')), h('span', { class: 'stat__lbl' }, comp == null ? (t.lang === 'zh' ? '자/분(속도만)' : 'WPM(속도만)') : 'ERR')),
-        comp != null ? h('div', { class: 'stat', style: { alignItems: 'center' } }, h('span', { class: 'stat__num' }, Math.round(comp * 100) + '%'), h('span', { class: 'stat__lbl' }, '빈칸 정확도')) : null),
-      comp == null ? h('div', { class: 'note note--warn' }, '이 글로는 자동 문제를 만들지 못했습니다. 속도만 기록합니다.') : null,
-      h('div', { class: 'btnrow', style: { justifyContent: 'center', marginTop: '12px' } },
-        h('button', { class: 'btn btn--primary', onClick: () => runCustomERR(t) }, '다시'),
-        h('button', { class: 'btn btn--ghost', onClick: backToTexts }, '내 글로'))));
-  };
-  mount(view,
-    h('div', { class: 'hud' },
-      h('button', { class: 'iconbtn', onClick: () => { timer.stop(); backToTexts(); } }, '‹'),
-      h('span', { class: 'chip' }, `${units}${t.lang === 'zh' ? '자' : '단어'}`), timerEl),
-    h('div', { class: 'card' }, h('div', { class: 'eyebrow' }, t.title), h('div', { class: 'reader', lang: t.lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': t.lang }, h('div', { class: 'reader-wrap' }, t.text))),
-    h('div', { class: 'btnrow', style: { marginTop: '12px' } }, h('button', { class: 'btn btn--primary btn--lg', onClick: done }, '다 읽음 → 이해 확인')));
-}
-
-// A6: 내 글 문장 검증(SVT) — 붙여넣은 텍스트에서 원문/1단어 변조 판정 문항을 자동 생성.
-// sentence.js의 tamper(내용어 치환)를 재사용해 정답이 원문으로 결정 → 자동 클로즈보다 정직한 채점 경로.
-function runCustomSVT(t) {
-  clear(view); window.scrollTo(0, 0);
-  drillActive = true;
-  const L = t.lang;
-  const sents = content.splitSentences(t.text, L).filter(s => countUnits(s, L) >= (L === 'zh' ? 8 : 6));
-  if (sents.length < 4) {
-    drillActive = false;
-    mount(view,
-      h('div', { class: 'hud' }, h('button', { class: 'iconbtn', onClick: backToTexts }, '‹'), h('span', { class: 'chip' }, '문장 검증(SVT)')),
-      h('div', { class: 'card' }, h('div', { class: 'note note--warn' }, '이 글은 문장이 너무 적거나 짧아 문장 검증 문항을 만들 수 없습니다. 조금 더 긴 단락으로 시도해 보세요.'),
-        h('div', { class: 'btnrow', style: { justifyContent: 'center', marginTop: '12px' } }, h('button', { class: 'btn btn--ghost', onClick: backToTexts }, '내 글로'))));
-    return;
+function chooseDifficulty(difficulty, source = 'manual') {
+  if (!store.setDifficulty(lang, difficulty, source)) {
+    alert(m('common.storage_error'));
+    return false;
   }
-  const chosen = shuffle(sents).slice(0, 6);
-  // 절반은 원문, 절반은 1단어 변조. 변조 실패한 문장은 원문으로 대체(정직).
-  const trials = shuffle(chosen.map((s, i) => {
-    if (i % 2 === 0) return { text: s, real: true };
-    const bad = tamper(s, t.text, L);
-    return bad ? { text: bad, real: false } : { text: s, real: true };
-  }));
-
-  const read = () => mount(view,
-    h('div', { class: 'hud' }, h('button', { class: 'iconbtn', onClick: backToTexts }, '‹'), h('span', { class: 'chip' }, '문장 검증(SVT) · 1/2 지문 읽기')),
-    h('div', { class: 'note small' }, '평소처럼 읽으세요. 다음 단계에서 이 글의 문장들을 ', h('b', null, '원문 그대로'), '인지 ', h('b', null, '한 단어가 바뀌었'), '는지 판정합니다.'),
-    h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'eyebrow' }, t.title),
-      h('div', { class: 'reader', lang: L === 'zh' ? 'zh-Hans' : 'en', 'data-lang': L }, h('div', { class: 'reader-wrap' }, t.text))),
-    h('div', { class: 'btnrow', style: { marginTop: '12px' } },
-      h('button', { class: 'btn btn--primary btn--lg', onClick: () => trial(0, [], []) }, '다 읽음 → 문장 검증')));
-
-  const trial = (i, results, rts) => {
-    if (i >= trials.length) return finish(results, rts);
-    const tr = trials[i];
-    const stim = h('div', { class: 'reader', lang: L === 'zh' ? 'zh-Hans' : 'en', 'data-lang': L, style: { textAlign: 'center', padding: '18px 6px' } }, tr.text);
-    let t0 = 0, shown = false;
-    setTimeout(() => { t0 = performance.now(); shown = true; }, 250);
-    const answer = (saidReal) => {
-      if (!shown) return;
-      results.push(saidReal === tr.real); rts.push(performance.now() - t0);
-      trial(i + 1, results, rts);
-    };
-    mount(view,
-      h('div', { class: 'hud' }, h('button', { class: 'iconbtn', onClick: backToTexts }, '‹'), h('span', { class: 'chip' }, '의미로 판단 — 표면 훑기로는 안 잡힙니다'), h('span', { class: 'chip' }, `${i + 1} / ${trials.length}`)),
-      h('div', { class: 'card' }, stim),
-      h('div', { class: 'btnrow', style: { justifyContent: 'center', marginTop: '12px' } },
-        h('button', { class: 'btn btn--primary btn--lg', onClick: () => answer(true) }, '지문 그대로 ✓'),
-        h('button', { class: 'btn btn--lg', onClick: () => answer(false) }, '바뀌었음 ✕')));
-  };
-
-  const finish = (results, rts) => {
-    drillActive = false;
-    const correct = results.filter(Boolean).length;
-    const acc = results.length ? correct / results.length : 0;
-    const med = rts.length ? Math.round(median(rts)) : 0;
-    store.logSession({ drill: 'mytext-svt', lang: L, acc, rt: med });
-    mount(view, h('div', { class: 'card fade-in center' },
-      h('p', { class: 'eyebrow' }, '문장 검증 결과'),
-      h('div', { class: 'stat-row', style: { justifyContent: 'center' } },
-        h('div', { class: 'stat', style: { alignItems: 'center' } }, h('span', { class: 'stat__num' }, correct + '/' + results.length), h('span', { class: 'stat__lbl' }, '정확 (원문 결정)')),
-        h('div', { class: 'stat', style: { alignItems: 'center' } }, h('span', { class: 'stat__num' }, (med / 1000).toFixed(1) + 's'), h('span', { class: 'stat__lbl' }, '문장당 중앙 판정시간'))),
-      h('div', { class: 'note ' + (acc >= 5 / 6 ? 'note--good' : 'note--warn'), style: { textAlign: 'left', marginTop: '8px' } }, acc >= 5 / 6
-        ? '문장을 의미로 통합하고 있습니다. 자동 빈칸 문제와 달리 정답이 원문으로 결정되므로 이 점수는 정직합니다.'
-        : '표면(단어 나열)이 아니라 의미로 기억해야 잡힙니다. 이 채점은 원문 대조라 검증된 문항입니다.'),
-      h('div', { class: 'btnrow', style: { justifyContent: 'center', marginTop: '12px' } },
-        h('button', { class: 'btn btn--primary', onClick: () => runCustomSVT(t) }, '다시'),
-        h('button', { class: 'btn btn--ghost', onClick: backToTexts }, '내 글로'))));
-  };
-
-  read();
-}
-
-function runCustomRecall(t) {
-  clear(view); window.scrollTo(0, 0);
-  drillActive = true;
-  const read = () => mount(view,
-    h('div', { class: 'hud' }, h('button', { class: 'iconbtn', onClick: backToTexts }, '‹'), h('span', { class: 'chip' }, '깊이 읽기')),
-    h('div', { class: 'card' }, h('div', { class: 'eyebrow' }, t.title), h('div', { class: 'reader', lang: t.lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': t.lang }, h('div', { class: 'reader-wrap' }, t.text))),
-    h('div', { class: 'btnrow', style: { marginTop: '12px' } }, h('button', { class: 'btn btn--primary btn--lg', onClick: recall }, '덮기 → 떠올리기')));
-  const recall = () => {
-    const recallTa = h('textarea', { placeholder: '보지 말고, 기억나는 핵심을 적어보세요.' });
-    const next = h('button', { class: 'btn btn--primary', disabled: true, onClick: quiz });
-    next.textContent = '자기 점검';
-    recallTa.addEventListener('input', () => next.disabled = recallTa.value.trim().length < 10);
-    mount(view, h('div', { class: 'note' }, '떠올리는 노력 자체가 학습입니다.'),
-      h('div', { style: { marginTop: '10px' } }, recallTa, h('div', { class: 'btnrow', style: { marginTop: '10px' } }, next)));
-  };
-  const quiz = () => {
-    const items = content.autoCloze(t.text, t.lang, 4);
-    if (!items.length) { store.logSession({ drill: 'mytext-recall', lang: t.lang }); return backToTexts(); }
-    const host = h('div');
-    mount(view, h('div', null, h('div', { class: 'eyebrow' }, '자동 빈칸 문제 (자기 점검)'), host));
-    compQuiz(host, items).then(() => { store.logSession({ drill: 'mytext-recall', lang: t.lang }); backToTexts(); });
-  };
-  read();
-}
-
-/* ---------- skill profile (radar) ---------- */
-const TIERS = [[85, '정통'], [65, '상급'], [45, '숙련'], [25, '발전'], [1, '입문'], [0, '미착수']];
-function tierName(v) { for (const [t, n] of TIERS) if (v >= t) return n; return '미착수'; }
-
-function skillProfile(lng) {
-  const st = store.getState();
-  const full = store.errSeries(lng, 'full');
-  const transfer = store.errSeries(lng, 'transfer');
-  const comp = full.length ? mean(full.map(r => r.comp)) * 100 : 0;
-  const targetW = lng === 'zh' ? 450 : 380;
-  const recentW = full.length ? median(full.slice(-5).map(r => r.wpm)) : 0;
-  const speed = clamp(Math.round(recentW / targetW * 100), 0, 100);
-  const vdeck = st.sr['vocab-' + lng] || {};
-  const matured = Object.values(vdeck).filter(c => c.reps >= 3).length;
-  const vocab = clamp(Math.round(matured / 40 * 100), 0, 100);
-  const retrN = st.sessions.filter(s => s.lang === lng && s.drill === 'retrieval').length;
-  const retention = clamp(transfer.length * 14 + retrN * 9, 0, 100);
-  const isStrat = s => s.lang === lng && /^(modes|triage|retrieval|preview)/.test(s.drill);
-  const stratKinds = new Set(st.sessions.filter(isStrat).map(s => s.drill.split('-')[0])).size;
-  const stratN = st.sessions.filter(isStrat).length;
-  const strategy = clamp(Math.round(stratKinds / 4 * 55 + stratN * 5), 0, 100);
-  return [
-    { name: '어휘', val: vocab },
-    { name: '속도', val: speed },
-    { name: '이해', val: Math.round(comp) },
-    { name: '유지·전이', val: retention },
-    { name: '전략', val: strategy },
-  ].map(s => ({ ...s, tier: tierName(s.val) }));
-}
-
-function renderRadar(skills) {
-  const ns = 'http://www.w3.org/2000/svg';
-  const W = 260, H = 220, cx = 130, cy = 106, R = 72, n = skills.length;
-  const ang = i => (-90 + i * (360 / n)) * Math.PI / 180;
-  const pt = (i, r) => [cx + r * Math.cos(ang(i)), cy + r * Math.sin(ang(i))];
-  const svg = document.createElementNS(ns, 'svg');
-  svg.setAttribute('class', 'radar'); svg.setAttribute('viewBox', `0 0 ${W} ${H}`); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', '읽기 스킬 프로필 레이더');
-  [0.34, 0.67, 1].forEach(f => {
-    const poly = document.createElementNS(ns, 'polygon');
-    poly.setAttribute('class', 'grid-line');
-    poly.setAttribute('points', skills.map((_, i) => pt(i, R * f).map(v => v.toFixed(1)).join(',')).join(' '));
-    svg.append(poly);
-  });
-  skills.forEach((s, i) => {
-    const [x, y] = pt(i, R);
-    const ax = document.createElementNS(ns, 'line');
-    ax.setAttribute('class', 'axis'); ax.setAttribute('x1', cx); ax.setAttribute('y1', cy); ax.setAttribute('x2', x.toFixed(1)); ax.setAttribute('y2', y.toFixed(1));
-    svg.append(ax);
-    const [lx, ly] = pt(i, R + 17);
-    const t = document.createElementNS(ns, 'text');
-    t.setAttribute('class', 'axis-lbl'); t.setAttribute('x', lx.toFixed(1)); t.setAttribute('y', ly.toFixed(1));
-    t.setAttribute('text-anchor', Math.abs(lx - cx) < 8 ? 'middle' : (lx > cx ? 'start' : 'end'));
-    t.setAttribute('dominant-baseline', 'central');
-    t.textContent = s.name;
-    svg.append(t);
-  });
-  const shape = document.createElementNS(ns, 'polygon');
-  shape.setAttribute('class', 'shape');
-  shape.setAttribute('points', skills.map((s, i) => pt(i, R * Math.max(0.02, s.val / 100)).map(v => v.toFixed(1)).join(',')).join(' '));
-  svg.append(shape);
-  skills.forEach((s, i) => {
-    const [x, y] = pt(i, R * Math.max(0.02, s.val / 100));
-    const c = document.createElementNS(ns, 'circle');
-    c.setAttribute('class', 'vtx'); c.setAttribute('cx', x.toFixed(1)); c.setAttribute('cy', y.toFixed(1)); c.setAttribute('r', '2.6');
-    svg.append(c);
-  });
-  return svg;
-}
-
-/* ---------- growth trend + plateau (A4) ---------- */
-// ISO 주(월요일 시작) 버킷 키 — 날짜축 눈금용
-function weekKey(ts) {
-  const d = new Date(ts);
-  const day = (d.getDay() + 6) % 7; // Mon=0
-  const monday = new Date(d); monday.setDate(d.getDate() - day); monday.setHours(0, 0, 0, 0);
-  return monday.getTime();
-}
-// 주간 평균 ERR 버킷 [{wk, avg, label}] — 시간축 정렬
-function weeklyBuckets(rows) {
-  const map = new Map();
-  rows.forEach(r => { if (!map.has(weekKey(r.ts))) map.set(weekKey(r.ts), []); map.get(weekKey(r.ts)).push(r.err); });
-  return [...map.entries()].sort((a, b) => a[0] - b[0]).map(([wk, arr]) => {
-    const d = new Date(wk);
-    return { wk, avg: arr.reduce((s, x) => s + x, 0) / arr.length, label: `${d.getMonth() + 1}/${d.getDate()}` };
-  });
-}
-// 지난주 대비 변화율(%) — 최근 2주 버킷 평균 비교. 데이터 부족이면 null.
-function weekOverWeek(rows) {
-  const b = weeklyBuckets(rows);
-  if (b.length < 2) return null;
-  const prev = b[b.length - 2].avg, cur = b[b.length - 1].avg;
-  if (prev <= 0) return null;
-  return Math.round((cur - prev) / prev * 100);
-}
-// 정체 감지: 최근 5개 전이 ERR의 연속 기울기(변화율)가 전부 ±3% 이내면 true. 데이터<5면 false.
-function isPlateau(errVals) {
-  if (errVals.length < 5) return false;
-  const last5 = errVals.slice(-5);
-  for (let i = 1; i < last5.length; i++) {
-    const base = last5[i - 1];
-    if (base <= 0) return false;
-    const pct = Math.abs((last5[i] - base) / base) * 100;
-    if (pct > 3) return false;
-  }
+  render();
   return true;
 }
 
-/* ---------- PROGRESS ---------- */
-function renderProgress() {
-  const full = store.errSeries(lang, 'full');
-  const transfer = store.errSeries(lang, 'transfer');
-  const gist = store.errSeries(lang, 'gist');
-  const fullErr = full.map(r => r.err);
-  const fullComp = full.map(r => r.comp);
-  const gistComp = gist.map(r => r.comp);
-  const ceil = store.getState().prof[lang].ceiling;
-  const rt = store.rtBands(lang);
-  const sessions = store.getState().sessions.length;
-  const skills = skillProfile(lang);
-
-  const ceilRows = Object.entries(ceil).sort((a, b) => a[0] - b[0]).map(([t, v]) => h('tr', null,
-    h('td', { style: { padding: '4px 10px 4px 0' } }, '난이도 ' + t), h('td', { style: { fontWeight: '700' } }, v + (lang === 'zh' ? ' 자/분' : ' WPM'))));
-
-  const rtRows = Object.entries(rt).filter(([, arr]) => arr.length).sort((a, b) => a[0] - b[0]).map(([band, arr]) => h('tr', null,
-    h('td', { style: { padding: '4px 10px 4px 0' } }, '빈도대 ' + band), h('td', { style: { fontWeight: '700' } }, Math.round(median(arr)) + ' ms'), h('td', { class: 'small muted' }, arr.length + '회')));
-
-  const weakest = skills.slice().sort((a, b) => a.val - b.val)[0];
-  const noSkillData = skills.every(s => s.val === 0);
-
-  mount(view, h('div', { class: 'fade-in' },
-    h('h1', { class: 'h1' }, '기록'),
-    h('p', { class: 'lead' }, (lang === 'en' ? 'English' : '中文') + ' 진행 상황. ERR(유효 읽기속도)과 이해도(정독 vs 훑기)를 분리해 정직하게 봅니다.'),
-
-    h('div', { class: 'card' },
-      h('div', { class: 'row spread', style: { alignItems: 'center', marginBottom: '4px' } },
-        h('h2', { class: 'h2', style: { margin: 0 } }, '읽기 스킬 프로필'),
-        (weakest && !noSkillData) ? h('span', { class: 'tier-pill' }, icon('target', { size: 14 }), '집중: ' + weakest.name) : null),
-      h('div', { class: 'radar-wrap', style: { marginTop: '12px' } },
-        renderRadar(skills),
-        h('div', { class: 'skill-list' }, ...skills.map(s => h('div', { class: 'skill' },
-          h('span', { class: 'skill__name' }, s.name),
-          h('span', { class: 'skill__tier' }, s.tier + ' · ' + s.val),
-          h('div', { class: 'skill__bar' }, h('div', { class: 'skill__fill', style: { width: Math.max(2, s.val) + '%' } })))))),
-      h('p', { class: 'small muted', style: { marginTop: '10px' } }, noSkillData
-        ? '아직 데이터가 없습니다. 오늘의 훈련을 시작하면 다섯 축이 채워지고, 가장 짧은 축이 다음 집중 영역이 됩니다.'
-        : '검증된 절대점수가 아니라 활동·이해 기록에서 추정한 상대 프로필입니다. 가장 짧은 축이 다음에 집중할 영역입니다.')),
-
-    (() => {
-      // A4: 시간축 눈금 + '지난주 대비' + 정체 배지. 전이 ERR 우선, 데이터 부족 시 정독 ERR로 폴백.
-      const trendRows = transfer.length >= 2 ? transfer : full;
-      const trendLabel = trendRows === transfer && transfer.length >= 2 ? '전이' : '정독';
-      const wow = weekOverWeek(trendRows);
-      const buckets = weeklyBuckets(trendRows);
-      const transferErr = transfer.map(r => r.err);
-      const plateau = isPlateau(transferErr);
-      const wowNode = wow != null
-        ? h('div', { class: 'trend-line' + (wow >= 0 ? ' trend-line--up' : ' trend-line--down') },
-            icon(wow >= 0 ? 'progress' : 'arrow', { size: 15 }),
-            h('span', null, '지난주 대비 ', h('b', null, (wow >= 0 ? '+' : '') + wow + '%'),
-              h('span', { class: 'small muted' }, ' · ' + trendLabel + ' ERR')))
-        : null;
-      const ticks = buckets.length > 1
-        ? h('div', { class: 'week-ticks' }, ...buckets.map(b => h('span', { class: 'week-tick' }, b.label)))
-        : null;
-      return h('div', { class: 'card' },
-        h('div', { class: 'row spread', style: { alignItems: 'center', marginBottom: '4px' } },
-          h('h2', { class: 'h2', style: { margin: 0 } }, 'ERR 추이 (유효 읽기속도 = 속도 × 이해율)'),
-          plateau ? h('span', { class: 'stall-badge', title: '최근 전이 ERR이 5회 연속 평평합니다' }, icon('target', { size: 13 }), '정체 — 커버리지·난이도 점검') : null),
-        fullErr.length > 1 ? sparkline(fullErr, 340, 64) : h('p', { class: 'muted small' }, 'ERR 정독을 몇 번 하면 추이가 그려집니다.'),
-        ticks,
-        wowNode,
-        h('div', { class: 'stat-row', style: { marginTop: '12px' } },
-          stat(fullErr.length ? Math.round(fullErr[fullErr.length - 1]) : '—', '최근 ERR'),
-          stat(fullErr.length ? Math.round(Math.max(...fullErr)) : '—', '최고 ERR'),
-          stat(transfer.length ? Math.round(transfer[transfer.length - 1].err) : '—', '전이 ERR', '새 지문 기준')));
-    })(),
-
-    h('div', { class: 'card' },
-      h('h2', { class: 'h2' }, '이해도 — 정독 vs 훑기 (분리)'),
-      h('div', { class: 'stat-row' },
-        stat(fullComp.length ? Math.round(mean(fullComp) * 100) + '%' : '—', '정독 이해도'),
-        stat(gistComp.length ? Math.round(mean(gistComp) * 100) + '%' : '—', '훑기(Gist) 정확도')),
-      h('p', { class: 'small muted', style: { marginTop: '8px' } }, '두 값의 격차가 곧 “언제 훑고 언제 정독할지” 전략의 근거입니다. 훑기 점수가 정독으로 둔갑하지 않습니다.')),
-
-    ceilRows.length ? h('div', { class: 'card' }, h('h2', { class: 'h2' }, '개인 한계 (이해 80%↑ 유지 최고속)'),
-      h('table', { style: { width: '100%', borderCollapse: 'collapse' } }, ...ceilRows),
-      h('p', { class: 'small muted', style: { marginTop: '8px' } }, '고정 목표가 아니라 경험적으로 측정한 개인별 천장입니다.')) : null,
-
-    rtRows.length ? h('div', { class: 'card' }, h('h2', { class: 'h2' }, '단어 인지 반응시간 (빈도대별)'),
-      h('table', { style: { width: '100%', borderCollapse: 'collapse' } }, ...rtRows),
-      h('p', { class: 'small muted', style: { marginTop: '8px' } }, '짧고 일정해질수록 자동화. (참고 지표, 검증된 점수 아님)')) : null,
-
-    h('div', { class: 'card' },
-      h('div', { class: 'row spread' },
-        h('span', { class: 'muted small' }, `총 ${sessions} 세션 기록`),
-        h('button', { class: 'btn btn--ghost small', onClick: () => go('settings') }, '설정 · 데이터 관리')),
-      h('p', { class: 'small muted', style: { marginTop: '6px' } }, '※ 향상은 “학습하지 않은 새 지문(전이)”에서 확인됩니다. 일반 인지능력 향상이 아니라 읽기 과제에 한정된 근거리 향상입니다.'))));
+function drillName(drill) {
+  return drill?.nameKey ? t(drill.nameKey, {}, drill.name || drill.id) : (drill?.name || drill?.id || '');
 }
 
-function stat(num, lbl, sub) { return h('div', { class: 'stat' }, h('span', { class: 'stat__num' }, num), h('span', { class: 'stat__lbl' }, lbl), sub ? h('span', { class: 'stat__sub' }, sub) : null); }
+function drillGoal(drill) {
+  return drill?.goalKey ? t(drill.goalKey, {}, drill.goal || '') : (drill?.goal || '');
+}
 
-/* ---------- SETTINGS ---------- */
-function levelPicker(lng) {
-  const cur = store.getLevel(lng);
-  return h('div', { class: 'row', style: { gap: '8px', flexWrap: 'wrap' } },
-    ...LEVEL_ORDER.map(key => h('button', {
-      class: 'seg__btn' + (cur === key ? ' is-active' : ''),
-      style: { border: '1px solid var(--line)' },
-      title: LEVELS[key].desc,
-      onClick: () => { store.setLevel(lng, key); renderSettings(); },
-    }, `${LEVELS[key].label} (${LEVELS[key].sub[lng]})`)));
+function launch(drill, options = {}) {
+  if (!drill || !drill.langs?.includes(lang) || !confirmLeave()) return;
+  const from = route === 'home' || route === 'train' ? route : 'train';
+  const exit = () => {
+    runTeardown();
+    drillActive = false;
+    route = from;
+    syncTabs();
+    render();
+  };
+  runTeardown();
+  drillActive = true;
+  clear(view);
+  window.scrollTo(0, 0);
+  drill.render(view, lang, exit, options);
+}
+
+function renderDifficultyStart() {
+  const cards = DIFFICULTY_ORDER.map(number => h('button', {
+    class: 'levelcard',
+    onClick: () => chooseDifficulty(number),
+  },
+  h('div', { class: 'levelcard__top' },
+    h('span', { class: 'levelcard__name' }, m('difficulty.badge') + ' ' + number),
+    h('span', { class: 'levelcard__sub' }, DIFFICULTIES[number].description[getUILang()])),
+  h('span', { class: 'levelcard__desc' }, m('difficulty.choose'))));
+
+  mount(view, h('div', { class: 'fade-in' },
+    h('div', { class: 'hero' },
+      h('div', { class: 'hero__eyebrow' }, icon('level', { size: 16 }), m('difficulty.badge')),
+      h('h1', { class: 'hero__name' }, m('difficulty.title')),
+      h('p', { class: 'hero__goal' }, m('difficulty.lead'))),
+    h('div', { class: 'levelgrid', style: { marginTop: '16px' } }, ...cards),
+    h('div', { class: 'linkrow' },
+      h('a', { href: '#train', onClick: event => { event.preventDefault(); go('train'); } }, m('difficulty.library')))));
+}
+
+function planAttemptDone(item, cycle, todayAttempts) {
+  return todayAttempts.some(attempt => {
+    if (attempt.drill !== item.drillId || attempt.completed !== true) return false;
+    if (!item.completionStage) return true;
+    return program.qualifiesStageAttempt(attempt, item.completionStage, {
+      nextReassessmentAt: cycle.nextReassessmentAt,
+    });
+  });
+}
+
+function phaseLabel(id) {
+  return m('phase.' + id);
+}
+
+function phaseStateLabel(stage) {
+  return m('phase.' + stage.status);
+}
+
+function renderHome() {
+  if (!currentDifficulty()) return renderDifficultyStart();
+  const cycle = program.cycleStatus(lang);
+  const plan = program.buildDailyPlan(lang);
+  const todayAttempts = store.attemptsToday(lang);
+  const maintained = metrics.maintainedRate(store.attemptsFor(lang), { lang });
+  const stableMaintainedRate = maintained.count >= 2 ? maintained.rate : null;
+  const streak = store.streakFor(lang);
+  const recommendation = program.difficultyRecommendation(lang);
+  const done = plan.filter(item => planAttemptDone(item, cycle, todayAttempts)).length;
+
+  const status = h('div', { class: 'today-status' },
+    h('div', { class: 'status-metrics' },
+      h('div', { class: 'metric' },
+        h('span', { class: 'metric__num' }, icon('target', { size: 17 }), phaseLabel(cycle.phase)),
+        h('span', { class: 'metric__lbl' }, m('home.phase'))),
+      h('div', { class: 'metric' },
+        h('span', { class: 'metric__num' }, String(streak.count || 0)),
+        h('span', { class: 'metric__lbl' }, m('home.streak'))),
+      h('div', { class: 'metric' },
+        h('span', { class: 'metric__num' }, stableMaintainedRate == null ? m('common.not_available') : Math.round(stableMaintainedRate)),
+        h('span', { class: 'metric__lbl' }, m('home.maintained') + ' · ' + unitLabel()))),
+    h('button', { class: 'level-pill', onClick: () => go('settings') },
+      icon('level', { size: 14 }), difficultyLabel(currentDifficulty(), getUILang())));
+
+  const blocks = plan.map((item, index) => {
+    const drill = DRILL_BY_ID[item.drillId];
+    const isDone = planAttemptDone(item, cycle, todayAttempts);
+    const options = item.slot === 'focus'
+      ? {
+        programStage: item.programStage,
+        targeted: !!item.targeted,
+        targetDrill: item.targetDrill,
+        targetSubmode: item.targetSubmode,
+        weaknessType: item.weaknessType,
+        source: 'daily-plan',
+      }
+      : { source: 'daily-plan' };
+    return h('article', { class: 'plan-block', 'data-status': isDone ? 'done' : 'pending' },
+      h('span', { class: 'plan-block__index' }, isDone ? icon('check', { size: 16 }) : String(index + 1)),
+      h('div', { class: 'plan-block__body' },
+        h('div', { class: 'row spread' },
+          h('h2', { class: 'plan-block__title' }, m('plan.' + item.slot) + ' · ' + drillName(drill)),
+          h('span', { class: 'plan-block__time' }, m('plan.minutes', { minutes: item.minutes }))),
+        h('p', { class: 'plan-block__reason' }, m('plan.reason.' + item.reasonKey)),
+        h('button', { class: 'btn' + (!isDone ? ' btn--primary' : ''), onClick: () => launch(drill, options) },
+          isDone ? m('plan.repeat') : m('common.start'))));
+  });
+
+  const recommendationCard = recommendation.ready && recommendation.difficulty !== currentDifficulty()
+    ? h('div', { class: 'note note--good' },
+      h('div', { class: 'row spread' },
+        h('div', null,
+          h('b', null, m('home.recommend_title')),
+          h('p', { class: 'small', style: { margin: '4px 0 0' } }, m('home.recommend_body', { difficulty: recommendation.difficulty }))),
+        h('button', { class: 'btn', onClick: () => chooseDifficulty(recommendation.difficulty, 'benchmark-provisional') }, m('home.recommend_apply'))))
+    : null;
+
+  mount(view, h('div', { class: 'fade-in' },
+    status,
+    h('div', { class: 'hero', style: { marginTop: '16px' } },
+      h('div', { class: 'hero__eyebrow' }, icon('today', { size: 15 }), m('home.eyebrow')),
+      h('h1', { class: 'hero__name' }, m('home.title')),
+      h('p', { class: 'hero__goal' }, m('home.lead')),
+      h('div', { class: 'small muted', style: { marginTop: '10px' } }, m('home.today_count', { count: done }))),
+    recommendationCard,
+    h('div', { class: 'daily-plan', style: { marginTop: '14px' } }, ...blocks),
+    maintained.count < 2
+      ? h('p', { class: 'small muted' }, m('home.need_data') + ' · ' + m('home.samples', { count: maintained.count }))
+      : h('p', { class: 'small muted' }, m('home.samples', { count: maintained.count })),
+    h('div', { class: 'linkrow' },
+      h('a', { href: '#train', onClick: event => { event.preventDefault(); go('train'); } }, m('home.all_unlocked')),
+      h('a', { href: '#theory', onClick: event => { event.preventDefault(); go('theory'); } }, t('shell.nav.theory'))),
+    content.data().isSeed ? h('div', { class: 'note note--warn' }, m('common.no_passage')) : null));
+}
+
+function renderCycle(cycle) {
+  return h('div', { class: 'training-cycle' }, ...cycle.stages.map((stage, index) =>
+    h('article', {
+      class: 'cycle-step' + (stage.status === 'active' || stage.status === 'scheduled' ? ' is-current' : '') + (stage.status === 'done' ? ' is-done' : ''),
+      'data-state': stage.status === 'done' ? 'done' : (stage.status === 'active' || stage.status === 'scheduled' ? 'current' : 'pending'),
+    },
+    h('span', { class: 'cycle-step__num' }, stage.status === 'done' ? icon('check', { size: 16 }) : String(index + 1)),
+    h('div', null,
+      h('h3', { class: 'cycle-step__title' }, phaseLabel(stage.id)),
+      h('p', { class: 'cycle-step__meta' },
+        phaseStateLabel(stage) + ' · ' + m('phase.progress', { done: stage.done, goal: stage.goal })),
+      stage.id === 'reassessment' && stage.status === 'scheduled'
+        ? h('p', { class: 'small muted' }, m('phase.next_date', { date: formatDate(cycle.nextReassessmentAt) }))
+        : null))));
+}
+
+function drillTile(drill) {
+  return h('button', { class: 'tile', onClick: () => launch(drill) },
+    h('div', { class: 'tile__top' },
+      h('span', { class: 'iconchip' }, icon(DRILL_ICON[drill.id] || drill.id)),
+      h('span', { class: 'tile__name' }, drillName(drill))),
+    h('span', { class: 'tile__goal' }, drillGoal(drill)));
+}
+
+function renderTrain() {
+  const cycle = program.cycleStatus(lang);
+  const categories = ['core', 'language_support', 'practice', 'tool'];
+  const groups = categories.map(category => {
+    const drills = DRILLS.filter(drill => drill.langs.includes(lang) && (drill.category || 'practice') === category);
+    if (!drills.length) return null;
+    return h('section', null,
+      h('p', { class: 'track-label' }, m('category.' + category)),
+      h('div', { class: 'tiles' }, ...drills.map(drillTile)));
+  }).filter(Boolean);
+
+  mount(view, h('div', { class: 'fade-in' },
+    h('h1', { class: 'h1' }, m('train.title')),
+    h('p', { class: 'lead' }, m('train.lead')),
+    h('section', { class: 'card' },
+      h('h2', { class: 'h2' }, m('train.cycle')),
+      renderCycle(cycle)),
+    h('details', { class: 'drill-library' },
+      h('summary', null, m('train.library')),
+      h('div', { class: 'drill-library__body' },
+        h('p', { class: 'small muted' }, m('train.library_help')),
+        ...groups))));
+}
+
+function detectLang(text) {
+  return /[㐀-鿿]/.test(text) ? 'zh' : 'en';
+}
+
+function renderMyTexts() {
+  const titleInput = h('input', { type: 'text', placeholder: m('mytexts.title_placeholder') });
+  const bodyInput = h('textarea', { placeholder: m('mytexts.body_placeholder.' + lang), maxlength: store.MY_TEXT_MAX_CHARS });
+  const counter = h('p', { class: 'small muted' }, m('mytexts.limit', { count: 0 }));
+  const errorBox = h('div');
+  bodyInput.addEventListener('input', () => {
+    counter.textContent = m('mytexts.limit', { count: bodyInput.value.length });
+  });
+  const saveText = () => {
+    const text = bodyInput.value.trim();
+    try {
+      const textLang = detectLang(text);
+      store.addMyText({
+        title: titleInput.value.trim() || text.slice(0, 36),
+        text,
+        lang: textLang,
+        unit_count: countUnits(text, textLang),
+      });
+      renderMyTexts();
+    } catch (error) {
+      mount(errorBox, h('div', { class: 'storage-alert note note--warn', role: 'alert' }, error.message || m('common.storage_error')));
+    }
+  };
+
+  const rows = store.myTexts();
+  const cards = rows.length ? rows.map(row => h('article', { class: 'card' },
+    h('div', { class: 'row spread' },
+      h('div', null,
+        h('h2', { class: 'h2', style: { margin: 0 } }, row.title),
+        h('p', { class: 'small muted', style: { margin: '4px 0 0' } },
+          (row.lang === 'zh' ? '中文' : 'English') + ' · ' + row.unit_count + ' ' + (row.lang === 'zh' ? '字' : 'words'))),
+      h('button', {
+        class: 'iconbtn', title: m('mytexts.remove_label'), 'aria-label': m('mytexts.remove_label'),
+        onClick: () => {
+          if (!confirm(m('mytexts.remove'))) return;
+          try { store.removeMyText(row.id); renderMyTexts(); }
+          catch (error) { alert(error.message || m('common.storage_error')); }
+        },
+      }, icon('trash', { size: 18 }))),
+    h('div', { class: 'btnrow', style: { marginTop: '12px' } },
+      h('button', { class: 'btn btn--primary', onClick: () => runCustomReading(row) }, m('mytexts.read')),
+      h('button', {
+        class: 'btn',
+        onClick: () => {
+          clear(view);
+          drillActive = true;
+          conquer.render(view, row.lang, backToTexts, { customText: row });
+        },
+      }, m('mytexts.conquer')),
+      h('button', {
+        class: 'btn',
+        onClick: () => {
+          clear(view);
+          drillActive = true;
+          triage.render(view, row.lang, backToTexts, { customText: row });
+        },
+      }, m('mytexts.triage'))))) : [h('div', { class: 'empty' }, m('mytexts.empty'))];
+
+  mount(view, h('div', { class: 'fade-in' },
+    h('h1', { class: 'h1' }, m('mytexts.title')),
+    h('p', { class: 'lead' }, m('mytexts.lead')),
+    h('div', { class: 'privacy-card note' }, m('mytexts.privacy')),
+    h('section', { class: 'card' },
+      h('h2', { class: 'h2' }, m('mytexts.form_title')),
+      h('label', { class: 'field' }, m('mytexts.title_label'), titleInput),
+      h('label', { class: 'field', style: { marginTop: '12px' } }, m('mytexts.body_label'), bodyInput),
+      counter,
+      errorBox,
+      h('div', { class: 'btnrow' }, h('button', { class: 'btn btn--primary', onClick: saveText }, m('common.save')))),
+    h('p', { class: 'track-label' }, m('mytexts.saved')),
+    ...cards));
+}
+
+function backToTexts() {
+  runTeardown();
+  drillActive = false;
+  route = 'mytexts';
+  syncTabs();
+  renderMyTexts();
+}
+
+function fatigueValue(value) {
+  if (Number.isInteger(value)) return value;
+  return { low: 2, medium: 3, high: 5 }[value] || 3;
+}
+
+function runCustomReading(row) {
+  clear(view);
+  window.scrollTo(0, 0);
+  drillActive = true;
+  const units = row.unit_count || countUnits(row.text, row.lang);
+  const startedAt = new Date().toISOString();
+  const timerText = h('span', { class: 'hud__timer' }, '0:00');
+  const timer = startTimer(ms => { timerText.textContent = fmtClock(ms); });
+  setTeardown(() => timer.stop());
+
+  const finishReading = () => {
+    const elapsedMs = timer.stop();
+    const rate = elapsedMs > 0 ? units / (elapsedMs / 60000) : 0;
+    const items = content.autoCloze(row.text, row.lang, 4);
+    const finish = quiz => {
+      askFatigue(view, m('custom.title'), backToTexts).then(fatigue => {
+        const timing = timingValidity(units, elapsedMs, row.lang);
+        const difficulty = store.getDifficulty(row.lang) || 3;
+        const saved = recordAttempt({
+          lang: row.lang, difficulty, tier: difficulty,
+          drill: 'mytext', submode: 'custom', benchmark: false,
+          startedAt, completed: true, sourcePassageId: row.id,
+          transferPassageId: null, novelAtStart: false, assisted: true,
+          timingValid: timing.timingValid, units, elapsedMs: Math.round(elapsedMs),
+          rate: Math.round(rate), correct: quiz?.correct ?? null, total: quiz?.total ?? null,
+          questionTypes: quiz?.questionTypes || {}, fatigue: fatigueValue(fatigue),
+        });
+        drillActive = false;
+        mount(view,
+          resultCard([
+            [Math.round(rate), unitLabel(row.lang), m('progress.rate')],
+            [quiz ? Math.round(quiz.frac * 100) + '%' : m('common.not_available'), m('progress.comprehension'), quiz ? quiz.correct + '/' + quiz.total : ''],
+          ], () => runCustomReading(row), backToTexts,
+          h('div', { class: 'stack' },
+            h('p', { class: 'small muted' }, quiz ? m('custom.result') : m('custom.no_quiz')),
+            attemptErrorNote(saved))));
+      });
+    };
+    if (!items.length) return finish(null);
+    const host = h('div');
+    mount(view, h('div', { class: 'hud' }, h('span', { class: 'chip' }, m('custom.quiz'))), host);
+    compQuiz(host, items, m('custom.quiz')).then(finish);
+  };
+
+  mount(view,
+    h('div', { class: 'hud' },
+      h('button', { class: 'iconbtn', onClick: () => { timer.stop(); backToTexts(); }, 'aria-label': t('drill.shared.back') }, '‹'),
+      h('span', { class: 'chip' }, units + ' ' + (row.lang === 'zh' ? '字' : 'words')),
+      timerText),
+    h('div', { class: 'note small' }, m('custom.instructions')),
+    h('div', { class: 'card' },
+      h('div', { class: 'eyebrow' }, row.title),
+      h('div', { class: 'reader', lang: row.lang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': row.lang },
+        h('div', { class: 'reader-wrap' }, row.text))),
+    h('div', { class: 'btnrow', style: { marginTop: '12px' } },
+      h('button', { class: 'btn btn--primary btn--lg', onClick: finishReading }, m('custom.finish'))));
+}
+
+function metricCard(value, label, note, modifier = '') {
+  return h('div', { class: 'result-pair ' + modifier },
+    h('span', { class: 'result-pair__label' }, label),
+    h('strong', { class: 'result-pair__value' }, value),
+    note ? h('span', { class: 'result-pair__note' }, note) : null);
+}
+
+function renderProgress() {
+  const attempts = store.attemptsFor(lang, { completed: true });
+  const maintained = metrics.maintainedRate(attempts, { lang });
+  const accurate = metrics.speedAndComprehension(attempts, { lang, submode: 'accuracy', limit: 12 });
+  const types = metrics.questionTypeAccuracy(attempts, { lang, submode: 'accuracy' });
+  const adjustment = metrics.recommendAdjustment(attempts, { lang });
+  const accurateRows = attempts.filter(row => row.submode === 'accuracy' && row.timingValid !== false).slice(-12);
+  const transferRows = attempts.filter(metrics.isColdTransferAttempt).slice(-12);
+  const qualifiedTransferRows = transferRows.filter(row => (
+    metrics.comprehensionOf(row) >= 0.8 && Number.isFinite(row.rate)
+  ));
+  const transferRates = qualifiedTransferRows.map(row => row.rate);
+  const transferMedian = transferRates.length ? median(transferRates) : null;
+  const modeRows = ['accuracy', 'gist', 'locate'].map(submode => ({
+    submode,
+    result: metrics.speedAndComprehension(attempts, { lang, submode, limit: 10 }),
+  }));
+
+  const breakdown = Object.entries(types).length
+    ? Object.entries(types).map(([type, result]) => {
+      const percent = result.accuracy == null ? 0 : Math.round(result.accuracy * 100);
+      const known = ['main_idea', 'inference', 'detail'].includes(type) ? type : 'other';
+      return h('div', { class: 'breakdown-row' },
+        h('span', null, m('progress.' + known)),
+        h('div', { class: 'bar' }, h('div', { class: 'bar__fill', style: { width: percent + '%' } })),
+        h('strong', null, percent + '%'),
+        h('span', { class: 'small muted' }, result.correct + '/' + result.total));
+    })
+    : [h('p', { class: 'small muted' }, t('common.noData'))];
+
+  const rateValues = accurateRows.map(row => row.rate).filter(Number.isFinite);
+  const compValues = accurateRows.map(row => metrics.comprehensionOf(row)).filter(Number.isFinite).map(value => Math.round(value * 100));
+
+  mount(view, h('div', { class: 'fade-in' },
+    h('h1', { class: 'h1' }, m('progress.title')),
+    h('p', { class: 'lead' }, m('progress.lead')),
+    h('section', { class: 'card' },
+      h('h2', { class: 'h2' }, m('progress.headline')),
+      h('div', { class: 'result-grid' },
+        metricCard(maintained.count < 2 || maintained.rate == null ? m('common.not_available') : Math.round(maintained.rate), unitLabel(), m('home.samples', { count: maintained.count }), 'result-metric--rate'),
+        metricCard(
+          transferMedian == null ? m('common.not_available') : Math.round(transferMedian),
+          m('progress.transfer') + ' · ' + unitLabel(),
+          m('progress.transfer_note', { qualified: qualifiedTransferRows.length, total: transferRows.length }),
+          'result-metric--rate'),
+        metricCard(accurate.meanComprehension == null ? m('common.not_available') : Math.round(accurate.meanComprehension * 100) + '%', m('progress.accuracy'), m('progress.comprehension'), 'result-metric--comprehension')),
+      h('p', { class: 'small muted' }, m('progress.headline_note'))),
+    h('div', { class: 'settings-grid' },
+      h('section', { class: 'card setting-card' },
+        h('h2', { class: 'h2' }, m('progress.rate_curve')),
+        rateValues.length > 1 ? sparkline(rateValues, 340, 80) : h('p', { class: 'small muted' }, t('common.noData'))),
+      h('section', { class: 'card setting-card' },
+        h('h2', { class: 'h2' }, m('progress.comp_curve')),
+        compValues.length > 1 ? sparkline(compValues, 340, 80) : h('p', { class: 'small muted' }, t('common.noData')))),
+    h('section', { class: 'card question-breakdown' },
+      h('h2', { class: 'h2' }, m('progress.question_types')),
+      ...breakdown),
+    h('section', { class: 'card' },
+      h('h2', { class: 'h2' }, m('progress.mode_results')),
+      h('div', { class: 'result-grid' }, ...modeRows.map(row =>
+        metricCard(
+          row.result.meanComprehension == null ? m('common.not_available') : Math.round(row.result.meanComprehension * 100) + '%',
+          m('progress.mode.' + row.submode),
+          row.result.medianRate == null ? '' : Math.round(row.result.medianRate) + ' ' + unitLabel(),
+          'result-metric--comprehension')))),
+    h('section', { class: 'card next-recommendation' },
+      h('h2', { class: 'h2' }, m('progress.adjustment')),
+      h('p', null, m('progress.adjust.' + adjustment.action))),
+    h('p', { class: 'small muted' }, m('progress.total', { count: attempts.length }) + ' · ' + m('progress.legacy'))));
+}
+
+function choiceButton(label, active, onClick) {
+  return h('button', {
+    class: 'btn' + (active ? ' btn--primary' : ''),
+    'aria-pressed': active ? 'true' : 'false',
+    onClick,
+  }, label);
+}
+
+function saveSetting(key, value, rerender = false) {
+  if (!store.setSetting(key, value)) {
+    alert(m('common.storage_error'));
+    return false;
+  }
+  applyReadingSettings();
+  if (rerender) renderSettings();
+  return true;
+}
+
+function rangeSetting(key, label, min, max, step, value, formatter) {
+  const id = 'setting-' + key;
+  const output = h('output', { for: id }, formatter(value));
+  const input = h('input', {
+    id, type: 'range', min, max, step, value,
+    onInput: event => {
+      const next = Number(event.target.value);
+      output.textContent = formatter(next);
+      saveSetting(key, next);
+    },
+  });
+  return h('div', { class: 'setting-row' },
+    h('label', { class: 'setting-row__label', for: id }, label),
+    h('div', { class: 'setting-row__control' }, input, output));
 }
 
 function renderSettings() {
-  const themeSeg = (val, label) => h('button', {
-    class: 'seg__btn' + ((store.getSetting('theme') || 'auto') === val ? ' is-active' : ''),
-    style: { border: '1px solid var(--line)' },
-    onClick: () => { store.setSetting('theme', val); applyTheme(); renderSettings(); },
-  }, label);
-
-  const doExport = () => {
-    const blob = new Blob([store.exportJSON()], { type: 'application/json' });
-    const a = h('a', { href: URL.createObjectURL(blob), download: 'readfast-backup.json' });
-    document.body.append(a); a.click(); a.remove();
-  };
-  const fileIn = h('input', { type: 'file', accept: '.json,application/json', style: { display: 'none' } });
-  fileIn.addEventListener('change', () => {
-    const f = fileIn.files[0]; if (!f) return;
-    f.text().then(txt => {
-      try { store.importJSON(txt); alert('가져오기 완료. 화면을 새로 그립니다.'); applyTheme(); go('home'); }
-      catch (e) { alert('가져오기 실패: 백업 파일 형식이 아닙니다.'); }
-    });
+  const theme = store.getSetting('theme') || 'auto';
+  const difficulty = currentDifficulty();
+  const fileInput = h('input', { type: 'file', accept: '.json,application/json', style: { display: 'none' } });
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    try {
+      store.importJSON(await file.text());
+      alert(m('settings.imported'));
+      lang = store.getSetting('lang') || 'en';
+      applyTheme();
+      applyReadingSettings();
+      go('home');
+    } catch (error) {
+      alert(m('settings.import_failed', { reason: error.code || error.message || m('common.error') }));
+    }
   });
 
+  const exportData = () => {
+    const blob = new Blob([store.exportJSON()], { type: 'application/json' });
+    const anchor = h('a', { href: URL.createObjectURL(blob), download: 'readfast-backup-v3.json' });
+    document.body.append(anchor);
+    anchor.click();
+    URL.revokeObjectURL(anchor.href);
+    anchor.remove();
+  };
+
   mount(view, h('div', { class: 'fade-in' },
-    h('h1', { class: 'h1' }, '설정'),
-    h('p', { class: 'lead' }, '레벨은 지문 난이도·훈련 속도·어휘 범위를 한 번에 정합니다. 언어별로 따로 저장됩니다.'),
-
-    h('div', { class: 'card' },
-      h('h2', { class: 'h2' }, '레벨'),
-      h('p', { class: 'field', style: { marginBottom: '6px' } }, 'English'),
-      levelPicker('en'),
-      h('p', { class: 'field', style: { margin: '14px 0 6px' } }, '中文'),
-      levelPicker('zh'),
-      h('p', { class: 'small muted', style: { marginTop: '10px' } },
-        '최상급·과부하는 최고난도 지문(영 C2+/중 HSK6+)과 전공(재료과학) 지문까지 포함합니다 — 한계 바로 위 부하로 훈련하고 싶을 때 고르세요. 드릴 안에서 난이도를 개별 선택할 수도 있습니다.')),
-
-    h('div', { class: 'card' },
-      h('h2', { class: 'h2' }, '훈련 방식'),
-      h('label', { class: 'row', style: { gap: '10px', cursor: 'pointer' } },
-        h('input', { type: 'checkbox', checked: !store.getSetting('freePlay'), onChange: e => { store.setSetting('freePlay', !e.target.checked); renderSettings(); } }),
-        h('span', null, '정복 경로 보기 ', h('span', { class: 'small muted' }, '— 권장 순서와 도장 진행을 한눈에 봅니다(잠금 없음, 어느 단계든 바로 도전). 끄면 전체 드릴 카탈로그로 표시.'))),
-      h('p', { class: 'small muted', style: { marginTop: '8px' } }, '클리어는 "한 번 해봄"이 아니라 측정된 기준 통과로 판정되고, 기존 기록에서 자동 소급됩니다.')),
-
-    h('div', { class: 'card' },
-      h('h2', { class: 'h2' }, '화면'),
-      h('div', { class: 'row', style: { gap: '8px' } }, themeSeg('auto', '자동'), themeSeg('light', '밝게'), themeSeg('dark', '어둡게'))),
-
-    h('div', { class: 'card' },
-      h('h2', { class: 'h2' }, '데이터'),
-      h('p', { class: 'small muted' }, '모든 기록은 이 기기(브라우저)에만 저장됩니다. 기기를 바꿀 땐 내보내기 → 가져오기를 쓰세요.'),
-      h('div', { class: 'btnrow', style: { marginTop: '10px' } },
-        h('button', { class: 'btn', onClick: doExport }, '백업 내보내기'),
-        h('button', { class: 'btn', onClick: () => fileIn.click() }, '백업 가져오기'), fileIn),
+    h('h1', { class: 'h1' }, m('settings.title')),
+    h('p', { class: 'lead' }, m('settings.lead')),
+    h('div', { class: 'settings-grid' },
+      h('section', { class: 'card setting-card' },
+        h('h2', { class: 'h2' }, m('settings.language')),
+        h('div', { class: 'setting-row' },
+          h('span', { class: 'setting-row__label' }, m('settings.ui_language')),
+          h('div', { class: 'choice-group setting-row__control' },
+            choiceButton(m('settings.korean'), getUILang() === 'ko', () => setUILang('ko')),
+            choiceButton(m('settings.english'), getUILang() === 'en', () => setUILang('en')))),
+        h('div', { class: 'setting-row' },
+          h('span', { class: 'setting-row__label' }, m('settings.training_language')),
+          h('div', { class: 'choice-group setting-row__control' },
+            choiceButton('English', lang === 'en', () => changeTrainingLanguage('en')),
+            choiceButton('中文', lang === 'zh', () => changeTrainingLanguage('zh'))))),
+      h('section', { class: 'card setting-card' },
+        h('h2', { class: 'h2' }, m('settings.difficulty')),
+        h('p', { class: 'small muted' }, m('settings.difficulty_help')),
+        h('div', { class: 'choice-group', style: { marginTop: '10px' } },
+          ...DIFFICULTY_ORDER.map(number => choiceButton(
+            number + ' · ' + DIFFICULTIES[number].description[getUILang()],
+            difficulty === number,
+            () => chooseDifficulty(number))))),
+      h('section', { class: 'card setting-card' },
+        h('h2', { class: 'h2' }, m('settings.display')),
+        rangeSetting('readerFontSize', m('settings.font_size'), 16, 30, 1, Number(store.getSetting('readerFontSize')) || 20, value => value + 'px'),
+        rangeSetting('readerLineHeight', m('settings.line_height'), 1.4, 2.2, 0.1, Number(store.getSetting('readerLineHeight')) || 1.75, value => Number(value).toFixed(1)),
+        rangeSetting('readerWidth', m('settings.width'), 42, 82, 2, Number(store.getSetting('readerWidth')) || 68, value => value + 'ch'),
+        h('label', { class: 'setting-row' },
+          h('span', { class: 'setting-row__label' }, m('settings.reduce_motion')),
+          h('input', {
+            type: 'checkbox', checked: !!store.getSetting('reduceMotion'),
+            onChange: event => saveSetting('reduceMotion', event.target.checked),
+          }))),
+      h('section', { class: 'card setting-card timer-controls' },
+        h('h2', { class: 'h2' }, m('settings.timer')),
+        h('label', { class: 'setting-row' },
+          h('span', { class: 'setting-row__label' }, m('settings.timer_visible')),
+          h('input', {
+            type: 'checkbox', checked: store.getSetting('timerVisible') !== false,
+            onChange: event => saveSetting('timerVisible', event.target.checked),
+          })),
+        rangeSetting('gistSeconds', m('settings.gist_seconds'), 20, 180, 10, Number(store.getSetting('gistSeconds')) || 60, value => m('settings.seconds', { value }))),
+      h('section', { class: 'card setting-card' },
+        h('h2', { class: 'h2' }, m('settings.theme')),
+        h('div', { class: 'choice-group' },
+          ...['auto', 'light', 'dark'].map(value => choiceButton(m('settings.' + value), theme === value, () => {
+            if (store.setSetting('theme', value)) {
+              applyTheme();
+              renderSettings();
+            } else alert(m('common.storage_error'));
+          }))))),
+    h('section', { class: 'card privacy-card' },
+      h('h2', { class: 'h2' }, m('settings.privacy')),
+      h('p', null, m('settings.privacy_body'))),
+    h('section', { class: 'card' },
+      h('h2', { class: 'h2' }, m('settings.data')),
+      h('p', { class: 'small muted' }, m('settings.data_help')),
+      h('div', { class: 'btnrow' },
+        h('button', { class: 'btn btn--primary', onClick: exportData }, m('settings.export')),
+        h('button', { class: 'btn', onClick: () => fileInput.click() }, m('settings.import')),
+        fileInput),
       h('hr', { class: 'sep' }),
       h('div', { class: 'btnrow' },
-        h('button', { class: 'btn btn--ghost', onClick: () => { if (confirm('훈련 기록만 초기화할까요? 내 글과 설정(레벨·테마)은 남습니다.')) { store.resetProgress(); go('home'); } } }, '기록 초기화 (내 글 보존)'),
-        h('button', { class: 'btn btn--ghost', style: { color: 'var(--bad)' }, onClick: () => { if (confirm('내 글을 포함한 모든 데이터를 삭제할까요?') && confirm('정말요? 붙여넣은 글도 전부 사라집니다.')) { store.resetEverything(); applyTheme(); go('home'); } } }, '전체 삭제'))),
-
-    installPrompt ? h('div', { class: 'card' },
-      h('h2', { class: 'h2' }, '앱으로 설치'),
-      h('p', { class: 'small muted' }, '홈 화면에 추가하면 오프라인에서도 앱처럼 쓸 수 있습니다.'),
-      h('button', { class: 'btn btn--primary', style: { marginTop: '8px' }, onClick: () => installPrompt.prompt() }, icon('install', { size: 18 }), ' 설치')) :
-      h('div', { class: 'card' },
-        h('h2', { class: 'h2' }, '앱으로 설치'),
-        h('p', { class: 'small muted' }, 'iPhone/iPad: 사파리 공유 버튼 → “홈 화면에 추가”. Android/PC: 브라우저 메뉴(또는 주소창 아이콘)의 “앱 설치”를 누르면 오프라인에서도 앱처럼 쓸 수 있습니다.')),
-
-    h('div', { class: 'card' },
-      h('h2', { class: 'h2' }, '만든 사람'),
-      h('p', { style: { margin: '0 0 8px' } }, '재료공학 연구자 ', h('b', null, '최승훈'), '이 영어·중국어 논문을 더 빨리, 정확히 읽으려고 읽기과학·학습과학의 검증된 방법만 골라 직접 만들었습니다. 과장된 속독 약속은 없습니다 — 무엇이 왜 들어갔는지는 「원리」 탭에 전부 공개돼 있습니다.'),
-      h('div', { class: 'linkrow', style: { justifyContent: 'flex-start', marginTop: '10px' } },
-        h('a', { href: 'https://seunghoonchoi.com', target: '_blank', rel: 'noopener' }, icon('globe', { size: 16 }), 'seunghoonchoi.com'),
-        h('a', { href: 'https://github.com/seunghoonchoi-phd/reading-trainer', target: '_blank', rel: 'noopener' }, icon('mytexts', { size: 16 }), '소스 코드 (GitHub)'),
-        h('a', { href: '#theory', onClick: e => { e.preventDefault(); go('theory'); } }, icon('theory', { size: 16 }), '원리·출처')))));
+        h('button', {
+          class: 'btn btn--ghost',
+          onClick: () => {
+            if (confirm(m('settings.reset_progress_confirm'))) {
+              try {
+                store.resetProgress();
+                go('home');
+              } catch (error) {
+                alert(error.message || m('common.storage_error'));
+              }
+            }
+          },
+        }, m('settings.reset_progress')),
+        h('button', {
+          class: 'btn btn--ghost',
+          style: { color: 'var(--bad)' },
+          onClick: () => {
+            if (confirm(m('settings.reset_all_confirm1')) && confirm(m('settings.reset_all_confirm2'))) {
+              try {
+                store.resetEverything();
+                go('home');
+              } catch (error) {
+                alert(error.message || m('common.storage_error'));
+              }
+            }
+          },
+        }, m('settings.reset_all')))),
+    h('section', { class: 'card' },
+      h('h2', { class: 'h2' }, m('settings.install')),
+      h('p', { class: 'small muted' }, installPrompt ? m('settings.install_help') : m('settings.install_manual')),
+      installPrompt ? h('button', { class: 'btn btn--primary', onClick: () => installPrompt.prompt() }, icon('install', { size: 18 }), m('settings.install_button')) : null),
+    h('section', { class: 'card' },
+      h('h2', { class: 'h2' }, m('settings.about')),
+      h('p', null, m('settings.about_body')),
+      h('div', { class: 'linkrow' },
+        h('a', { href: 'https://seunghoonchoi.com', target: '_blank', rel: 'noopener' }, 'seunghoonchoi.com'),
+        h('a', { href: 'https://github.com/seunghoonchoi-phd/reading-trainer', target: '_blank', rel: 'noopener' }, m('settings.source')),
+        h('a', { href: '#theory', onClick: event => { event.preventDefault(); go('theory'); } }, m('settings.principles'))))));
 }
 
-/* ---------- boot ---------- */
-function paintTabIcons() {
-  $$('.tab').forEach(t => { const name = TAB_ICON[t.dataset.route]; const span = t.querySelector('.tab__ico'); if (span && name) span.innerHTML = iconSvg(name); });
-  const logo = $('.appbar__logo'); if (logo) logo.innerHTML = iconSvg('brand');
-  const gear = $('#settingsBtn'); if (gear) gear.innerHTML = iconSvg('gear');
+function changeTrainingLanguage(next) {
+  if (next === lang || !['en', 'zh'].includes(next) || !confirmLeave()) return;
+  if (!store.setSetting('lang', next)) {
+    alert(m('common.storage_error'));
+    return;
+  }
+  lang = next;
+  syncTrainingLanguage();
+  render();
 }
+
+$('.appbar__brand')?.addEventListener('click', () => go('home'));
+$('#settingsBtn')?.addEventListener('click', () => go('settings'));
+$('#uiLangToggle')?.addEventListener('click', event => {
+  if (drillActive && !confirmLeave()) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+}, true);
+$('#themeToggle')?.addEventListener('click', () => {
+  const next = resolveTheme() === 'dark' ? 'light' : 'dark';
+  if (store.setSetting('theme', next)) applyTheme();
+  else alert(m('common.storage_error'));
+});
+$$('.tab').forEach(tab => tab.addEventListener('click', () => go(tab.dataset.route)));
+$$('.seg__btn[data-lang]').forEach(button => button.addEventListener('click', () => changeTrainingLanguage(button.dataset.lang)));
+
+window.addEventListener('hashchange', () => {
+  const next = location.hash.slice(1);
+  if (!ROUTES.includes(next) || next === route) return;
+  if (!confirmLeave()) {
+    location.hash = route;
+    return;
+  }
+  route = next;
+  syncTabs();
+  render();
+});
+
+window.addEventListener('readfast:ui-language-change', () => {
+  refreshMeta();
+  paintThemeToggle(resolveTheme());
+  render();
+});
+
+window.addEventListener('readfast:storage-error', () => {
+  alert(m('common.storage_error'));
+});
+
+window.addEventListener('readfast:drill-state', event => {
+  drillActive = event.detail?.active === true;
+});
+
+window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
+  if ((store.getSetting('theme') || 'auto') === 'auto') applyTheme();
+});
 
 async function boot() {
+  initI18n();
+  refreshMeta();
   applyTheme();
+  applyReadingSettings();
   paintTabIcons();
-  const hashRoute = location.hash.slice(1);
-  if (ROUTES.includes(hashRoute)) route = hashRoute;
-  $$('.seg__btn').forEach(x => x.classList.toggle('is-active', x.dataset.lang === lang));
+  const hash = location.hash.slice(1);
+  if (ROUTES.includes(hash)) route = hash;
   syncTabs();
-  view.innerHTML = '<div class="empty">콘텐츠 불러오는 중…</div>';
+  syncTrainingLanguage();
+  if (store.getLoadIssue()) {
+    renderRecoveryScreen();
+    return;
+  }
+  view.innerHTML = '<div class="empty">' + m('loading') + '</div>';
   await content.loadContent();
-  // A1: 두 언어 모두 도장 클리어를 최초 1회 durable 원장에 스냅샷 (세션 FIFO에도 도장 유지)
-  try { seedClears('en'); seedClears('zh'); } catch {}
   render();
-  // register service worker
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
 boot();

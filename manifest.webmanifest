@@ -1,12 +1,12 @@
 {
-  "name": "리드패스트 — 읽기 속도·이해 훈련",
+  "id": "./",
+  "name": "리드패스트 | 읽기 속도와 이해 훈련",
   "short_name": "리드패스트",
-  "description": "영어·중국어 읽기 속도·이해 훈련. 속독 미신 없이, 근거가 검증된 방법만.",
-  "lang": "ko",
+  "description": "영어와 중국어를 읽은 속도와 이해 결과를 따로 기록하고, 처음 보는 글에서 변화를 확인하는 훈련 앱.",
+  "lang": "ko-KR",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
   "background_color": "#F8F6F3",
   "theme_color": "#FCFBF9",
   "icons": [

@@ -1,7 +1,7 @@
 // ===== content.js — corpus loading, selection, tokenization, auto-cloze =====
 import { countUnits, shuffle, sample } from './util.js';
 import * as store from './store.js';
-import { levelOf } from './levels.js';
+import { difficultyFromLegacyLevel, normalizeDifficulty } from './levels.js';
 
 // ---- seed fallback so the app runs before data/*.json is generated ----
 const SEED = {
@@ -14,6 +14,7 @@ const SEED = {
         { type: 'main_idea', q: '이 글의 중심 내용은?', options: ['등대지기의 헌신적 삶과 기술 변화로 인한 퇴장', '전기 등대의 기술적 우수성', '폭풍 속 난파선 구조 작전', '뱃사람들의 항해 일지'], answer: 0, explanation: '30년간 등대를 지킨 삶과, 전기 등대 도입으로 떠나는 결말이 중심입니다.' },
         { type: 'inference', q: 'Aldous가 구한 선원들을 거의 보지 못했지만 그들을 알 수 있었던 이유는?', options: ['편지를 주고받아서', '감사의 뱃고동 소리로', '항구에서 만나서', '신문 기사로'], answer: 1, explanation: '"grateful blasts of their horns"로 그들을 알았다고 했습니다.' },
         { type: 'detail', q: '새로 도착한 것은 무엇인가?', options: ['새 선장', '전기 등대(beacon)', '나선 계단', '구조선'], answer: 1, explanation: '"the new electric beacon arrived"' },
+        { type: 'detail', q: 'Aldous는 언제 나선 계단을 올랐는가?', options: ['매일 저녁과 아침', '폭풍이 올 때만', '매주 한 번', '배가 항구에 들어올 때만'], answer: 0, explanation: '매일 저녁 불을 켜고 매일 아침 끄기 위해 계단을 올랐습니다.' },
       ],
       gist: { q: '한 문장 요지로 가장 알맞은 것은?', options: ['기술 변화가 한 등대지기의 평생 직업을 끝냈다', '등대는 항해에 불필요하다', '전기는 위험하다', '바다는 위험하다'], answer: 0 },
       scan: { q: 'Aldous가 등대를 지킨 기간(연수)은?', answer: 'thirty years' },
@@ -26,6 +27,7 @@ const SEED = {
         { type: 'main_idea', q: '这段话主要在说什么？', options: ['一家有人情味的老茶馆', '怎样泡好一杯茶', '城南的交通问题', '年轻人的爱好'], answer: 0, explanation: '全文围绕老茶馆和常客、老板的关系展开。' },
         { type: 'inference', q: '从"客人一进门，他就把茶泡好了"可以看出周师傅怎样？', options: ['动作很慢', '熟悉并关心常客', '不喜欢说话', '生意不好'], answer: 1, explanation: '记得每人爱喝的茶，说明他熟悉且关心常客。' },
         { type: 'detail', q: '老板姓什么？', options: ['张', '李', '周', '王'], answer: 2, explanation: '"老板姓周"。' },
+        { type: 'detail', q: '附近的老人每天早上来茶馆做什么？', options: ['喝茶、下棋、聊天', '工作和开会', '唱歌和跳舞', '买桌子'], answer: 0, explanation: '文章说老人每天早上来这里喝茶、下棋、聊天。' },
       ],
       gist: { q: '最合适的一句话概括是？', options: ['老茶馆因安静和人情味受老人喜爱', '茶馆要装修', '年轻人爱喝茶', '下棋很难'], answer: 0 },
       scan: { q: '这家茶馆开了大约多少年？', answer: '一百年' },
@@ -97,17 +99,22 @@ export function passagesFor(lang, tier) {
 export function allTiers(lang) {
   return [...new Set(DATA.passages.filter(p => p.lang === lang).map(p => p.tier))].sort((a, b) => a - b);
 }
-// 레벨 프로필의 티어 창 (구 TIER_FLOOR/HIDE_EASY 전역 상수를 대체 — 과부하 레벨이 옛 동작 [5,6]을 재현)
+// Public app difficulty maps 1:1 to passage tier. Legacy preference is a
+// compatibility fallback only and never counts as proficiency evidence.
 export function tiersFor(lang) {
   const all = allTiers(lang);
-  const lv = levelOf(store.getLevel(lang) || 'builder');
-  const win = lv.tiers.filter(t => all.includes(t));
-  return win.length ? win : all;
+  const difficulty = store.getDifficulty(lang) || difficultyFromLegacyLevel(store.getLevel(lang));
+  return difficulty && all.includes(difficulty) ? [difficulty] : all;
 }
-// 전공 특화(materials) 지문은 과부하 레벨에서만 기본 노출 — 일반 학습자에겐 general 우선
-function domainFilter(pool, lang) {
-  if (store.getLevel(lang) === 'overload') return pool;
-  const general = pool.filter(p => (p.domain || 'general') !== 'materials');
+
+function domainFilter(pool, domain = null, difficulty = null) {
+  if (domain) {
+    const exact = pool.filter(p => (p.domain || 'general') === domain);
+    if (exact.length) return exact;
+    return pool.filter(p => (p.domain || 'general') === 'general');
+  }
+  if (normalizeDifficulty(difficulty) === 6) return pool;
+  const general = pool.filter(p => (p.domain || 'general') === 'general');
   return general.length ? general : pool;
 }
 // 덜 본 지문 우선 (markSeen 이력 연동 — 같은 지문 반복 노출을 늦춤)
@@ -117,18 +124,34 @@ function freshest(pool) {
   const fresh = pool.filter(p => store.seenCount(p.id) === min);
   return shuffle(fresh)[0];
 }
+export function pickUnseenPassage(lang, { tier = null, difficulty = null, excludeIds = [], domain = null } = {}) {
+  if (!DATA || !['en', 'zh'].includes(lang)) return null;
+  const requested = normalizeDifficulty(tier) || normalizeDifficulty(difficulty) || store.getDifficulty(lang);
+  const eligible = requested ? [requested] : tiersFor(lang);
+  const excluded = new Set(excludeIds || []);
+  let pool = DATA.passages.filter(p => (
+    p.lang === lang
+    && eligible.includes(p.tier)
+    && !excluded.has(p.id)
+    && store.seenCount(p.id) === 0
+  ));
+  pool = domainFilter(pool, domain, requested);
+  return pool.length ? shuffle(pool)[0] : null;
+}
+
 export function pickPassage(lang, tier, exclude = []) {
-  if (tier == null) {
-    const elig = tiersFor(lang);
-    let pool = DATA.passages.filter(p => p.lang === lang && elig.includes(p.tier) && !exclude.includes(p.id));
-    if (!pool.length) pool = DATA.passages.filter(p => p.lang === lang && elig.includes(p.tier));
-    if (!pool.length) pool = passagesFor(lang);
-    return freshest(domainFilter(pool, lang));
-  }
-  let pool = passagesFor(lang, tier).filter(p => !exclude.includes(p.id));
-  if (!pool.length) pool = passagesFor(lang, tier);
+  const excludeIds = Array.isArray(exclude) ? exclude : (exclude?.excludeIds || []);
+  const domain = Array.isArray(exclude) ? null : (exclude?.domain || null);
+  const unseen = pickUnseenPassage(lang, { tier, excludeIds, domain });
+  if (unseen) return unseen;
+
+  const requested = normalizeDifficulty(tier);
+  const eligible = requested ? [requested] : tiersFor(lang);
+  const excluded = new Set(excludeIds);
+  let pool = DATA.passages.filter(p => p.lang === lang && eligible.includes(p.tier) && !excluded.has(p.id));
+  if (!pool.length) pool = DATA.passages.filter(p => p.lang === lang && eligible.includes(p.tier));
   if (!pool.length) pool = passagesFor(lang);
-  return freshest(domainFilter(pool, lang));
+  return freshest(domainFilter(pool, domain, requested || store.getDifficulty(lang)));
 }
 // content-word set for narrow-reading overlap (en: 4+ letter non-stopwords; zh: Han chars)
 function contentWords(text, lang) {
@@ -136,9 +159,16 @@ function contentWords(text, lang) {
   return new Set((text.toLowerCase().match(/[a-z]{4,}/g) || []).filter(w => !STOP_EN.has(w)));
 }
 // a "related" passage = same tier, sharing the MOST content words (narrow-reading proxy for transfer)
-export function relatedPassage(p, exclude = []) {
-  const pool = passagesFor(p.lang, p.tier).filter(x => x.id !== p.id && !exclude.includes(x.id));
-  if (!pool.length) return pickPassage(p.lang, p.tier, [p.id, ...exclude]);
+export function relatedPassage(p, options = []) {
+  const legacy = Array.isArray(options);
+  const excludeIds = legacy ? options : (options.excludeIds || []);
+  const unseenOnly = legacy ? false : options.unseenOnly !== false;
+  const domain = legacy ? (p.domain || null) : (options.domain || p.domain || null);
+  const excluded = new Set([p.id, ...excludeIds]);
+  let pool = passagesFor(p.lang, p.tier).filter(x => !excluded.has(x.id));
+  if (unseenOnly) pool = pool.filter(x => store.seenCount(x.id) === 0);
+  pool = domainFilter(pool, domain, p.tier);
+  if (!pool.length) return legacy ? pickPassage(p.lang, p.tier, [p.id, ...excludeIds]) : null;
   const base = contentWords(p.text, p.lang);
   let best = null, bestScore = -1;
   for (const c of pool) {
