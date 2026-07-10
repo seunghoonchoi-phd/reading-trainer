@@ -97,6 +97,22 @@ for (const file of walk('js', item => item.endsWith('.js'))) {
   }
 }
 
+const app = read('js/app.js');
+const styles = read('css/styles.css');
+const assessment = read('js/drills/err.js');
+for (const className of [
+  'result-metric__label', 'result-metric__value', 'result-metric__note',
+  'breakdown-row__label', 'breakdown-row__track', 'breakdown-row__fill', 'breakdown-row__value',
+]) {
+  if (!app.includes(className)) fail(`Rendered progress markup must use the CSS contract class: ${className}`);
+  if (!styles.includes(`.${className}`)) fail(`CSS must define the progress markup contract class: ${className}`);
+}
+if (app.includes('result-pair__')) fail('Progress cards must not use the obsolete result-pair child classes.');
+if (/\.result-grid\s*,\s*\.result-pair\s*\{/.test(styles)) fail('Only the result grid, not each result card, may create the outer metric columns.');
+if (!styles.includes('@media (min-width: 900px)')) fail('The desktop tab bar breakpoint must leave tablet widths in the mobile layout.');
+if (!app.includes('setDrillActive') || !styles.includes('body.drill-mode .tabbar')) fail('Active drills must enter a focused layout without global navigation.');
+if (!assessment.includes('row check-row') || !styles.includes('.check-row')) fail('The optional pacer checkbox must have a full-row 44px touch target.');
+
 try {
   const manifest = JSON.parse(read('manifest.webmanifest'));
   if (manifest.orientation === 'portrait' || manifest.orientation === 'portrait-primary') {

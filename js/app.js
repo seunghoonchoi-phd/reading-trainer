@@ -66,9 +66,9 @@ registerMessages('ko', {
   'app.home.recommend_title': '시작 난이도 제안',
   'app.home.recommend_body': '처음 보는 글 3회의 결과로 앱 난이도 {difficulty}를 임시 제안합니다. 자동으로 바꾸지 않습니다.',
   'app.home.recommend_apply': '제안 적용',
-  'app.plan.prepare': '1. 준비',
-  'app.plan.focus': '2. 본훈련',
-  'app.plan.transfer': '3. 전이·인출',
+  'app.plan.prepare': '준비',
+  'app.plan.focus': '본훈련',
+  'app.plan.transfer': '전이·인출',
   'app.plan.minutes': '약 {minutes}분',
   'app.plan.repeat': '한 번 더',
   'app.plan.reason.prepare.baseline': '어휘를 짧게 깨우고 기준선 읽기를 준비합니다.',
@@ -86,10 +86,10 @@ registerMessages('ko', {
   'app.plan.reason.prepare.maintenance': '재측정일까지 자주 쓰는 어휘를 짧게 복습합니다.',
   'app.plan.reason.focus.maintenance': '새 평가 글을 쓰지 않고 최근에 약했던 부분을 유지합니다.',
   'app.plan.reason.transfer.maintenance': '이미 읽은 글의 핵심을 보지 않고 다시 꺼냅니다.',
-  'app.phase.baseline': '1. 현재 상태 확인',
-  'app.phase.weakness': '2. 약한 부분 연습',
-  'app.phase.transfer': '3. 처음 보는 글 전이',
-  'app.phase.reassessment': '4. 주간 재측정',
+  'app.phase.baseline': '현재 상태 확인',
+  'app.phase.weakness': '약한 부분 연습',
+  'app.phase.transfer': '처음 보는 글 전이',
+  'app.phase.reassessment': '주간 재측정',
   'app.phase.pending': '예정',
   'app.phase.active': '지금',
   'app.phase.scheduled': '재측정일 대기',
@@ -242,9 +242,9 @@ registerMessages('en', {
   'app.home.recommend_title': 'Starting-difficulty suggestion',
   'app.home.recommend_body': 'Three unseen-text attempts suggest app difficulty {difficulty}. The app will not change it automatically.',
   'app.home.recommend_apply': 'Apply suggestion',
-  'app.plan.prepare': '1. Prepare',
-  'app.plan.focus': '2. Focus',
-  'app.plan.transfer': '3. Transfer or retrieve',
+  'app.plan.prepare': 'Prepare',
+  'app.plan.focus': 'Focus',
+  'app.plan.transfer': 'Transfer or retrieve',
   'app.plan.minutes': 'about {minutes} min',
   'app.plan.repeat': 'Repeat',
   'app.plan.reason.prepare.baseline': 'Warm up frequent words before a baseline read.',
@@ -262,10 +262,10 @@ registerMessages('en', {
   'app.plan.reason.prepare.maintenance': 'Review frequent words while waiting for reassessment day.',
   'app.plan.reason.focus.maintenance': 'Maintain a recent weak area without consuming a new assessment text.',
   'app.plan.reason.transfer.maintenance': 'Retrieve the main points of a text you have already read.',
-  'app.phase.baseline': '1. Check the current level',
-  'app.phase.weakness': '2. Practice a weak point',
-  'app.phase.transfer': '3. Transfer to an unseen text',
-  'app.phase.reassessment': '4. Weekly reassessment',
+  'app.phase.baseline': 'Check the current level',
+  'app.phase.weakness': 'Practice a weak point',
+  'app.phase.transfer': 'Transfer to an unseen text',
+  'app.phase.reassessment': 'Weekly reassessment',
   'app.phase.pending': 'Upcoming',
   'app.phase.active': 'Current',
   'app.phase.scheduled': 'Waiting for reassessment',
@@ -384,6 +384,11 @@ let route = 'home';
 let drillActive = false;
 let installPrompt = null;
 
+function setDrillActive(active) {
+  drillActive = active === true;
+  document.body.classList.toggle('drill-mode', drillActive);
+}
+
 window.addEventListener('beforeinstallprompt', event => {
   event.preventDefault();
   installPrompt = event;
@@ -474,7 +479,7 @@ function confirmLeave() {
   const approved = confirm(m('leave'));
   if (approved) {
     runTeardown();
-    drillActive = false;
+    setDrillActive(false);
   }
   return approved;
 }
@@ -498,7 +503,7 @@ function render() {
   if (store.getLoadIssue()) return renderRecoveryScreen();
   document.body.classList.remove('recovery-mode');
   runTeardown();
-  drillActive = false;
+  setDrillActive(false);
   clear(view);
   window.scrollTo(0, 0);
   if (route === 'home') renderHome();
@@ -515,7 +520,7 @@ function renderRecoveryScreen() {
   const issue = store.getLoadIssue();
   if (!issue) return;
   runTeardown();
-  drillActive = false;
+  setDrillActive(false);
   document.body.classList.add('recovery-mode');
   clear(view);
   const raw = store.getCorruptBackupText();
@@ -578,13 +583,13 @@ function launch(drill, options = {}) {
   const from = route === 'home' || route === 'train' ? route : 'train';
   const exit = () => {
     runTeardown();
-    drillActive = false;
+    setDrillActive(false);
     route = from;
     syncTabs();
     render();
   };
   runTeardown();
-  drillActive = true;
+  setDrillActive(true);
   clear(view);
   window.scrollTo(0, 0);
   drill.render(view, lang, exit, options);
@@ -669,7 +674,7 @@ function renderHome() {
     return h('article', { class: 'plan-block', 'data-status': isDone ? 'done' : 'pending' },
       h('span', { class: 'plan-block__index' }, isDone ? icon('check', { size: 16 }) : String(index + 1)),
       h('div', { class: 'plan-block__body' },
-        h('div', { class: 'row spread' },
+        h('div', { class: 'plan-block__head' },
           h('h2', { class: 'plan-block__title' }, m('plan.' + item.slot) + ' · ' + drillName(drill)),
           h('span', { class: 'plan-block__time' }, m('plan.minutes', { minutes: item.minutes }))),
         h('p', { class: 'plan-block__reason' }, m('plan.reason.' + item.reasonKey)),
@@ -801,7 +806,7 @@ function renderMyTexts() {
         class: 'btn',
         onClick: () => {
           clear(view);
-          drillActive = true;
+          setDrillActive(true);
           conquer.render(view, row.lang, backToTexts, { customText: row });
         },
       }, m('mytexts.conquer')),
@@ -809,7 +814,7 @@ function renderMyTexts() {
         class: 'btn',
         onClick: () => {
           clear(view);
-          drillActive = true;
+          setDrillActive(true);
           triage.render(view, row.lang, backToTexts, { customText: row });
         },
       }, m('mytexts.triage'))))) : [h('div', { class: 'empty' }, m('mytexts.empty'))];
@@ -831,7 +836,7 @@ function renderMyTexts() {
 
 function backToTexts() {
   runTeardown();
-  drillActive = false;
+  setDrillActive(false);
   route = 'mytexts';
   syncTabs();
   renderMyTexts();
@@ -845,7 +850,7 @@ function fatigueValue(value) {
 function runCustomReading(row) {
   clear(view);
   window.scrollTo(0, 0);
-  drillActive = true;
+  setDrillActive(true);
   const units = row.unit_count || countUnits(row.text, row.lang);
   const startedAt = new Date().toISOString();
   const timerText = h('span', { class: 'hud__timer' }, '0:00');
@@ -869,7 +874,7 @@ function runCustomReading(row) {
           rate: Math.round(rate), correct: quiz?.correct ?? null, total: quiz?.total ?? null,
           questionTypes: quiz?.questionTypes || {}, fatigue: fatigueValue(fatigue),
         });
-        drillActive = false;
+        setDrillActive(false);
         mount(view,
           resultCard([
             [Math.round(rate), unitLabel(row.lang), m('progress.rate')],
@@ -901,10 +906,10 @@ function runCustomReading(row) {
 }
 
 function metricCard(value, label, note, modifier = '') {
-  return h('div', { class: 'result-pair ' + modifier },
-    h('span', { class: 'result-pair__label' }, label),
-    h('strong', { class: 'result-pair__value' }, value),
-    note ? h('span', { class: 'result-pair__note' }, note) : null);
+  return h('div', { class: 'result-metric ' + modifier },
+    h('span', { class: 'result-metric__label' }, label),
+    h('strong', { class: 'result-metric__value' }, value),
+    note ? h('span', { class: 'result-metric__note' }, note) : null);
 }
 
 function renderProgress() {
@@ -930,10 +935,9 @@ function renderProgress() {
       const percent = result.accuracy == null ? 0 : Math.round(result.accuracy * 100);
       const known = ['main_idea', 'inference', 'detail'].includes(type) ? type : 'other';
       return h('div', { class: 'breakdown-row' },
-        h('span', null, m('progress.' + known)),
-        h('div', { class: 'bar' }, h('div', { class: 'bar__fill', style: { width: percent + '%' } })),
-        h('strong', null, percent + '%'),
-        h('span', { class: 'small muted' }, result.correct + '/' + result.total));
+        h('span', { class: 'breakdown-row__label' }, m('progress.' + known)),
+        h('div', { class: 'breakdown-row__track' }, h('div', { class: 'breakdown-row__fill', style: { width: percent + '%' } })),
+        h('strong', { class: 'breakdown-row__value' }, percent + '% · ' + result.correct + '/' + result.total));
     })
     : [h('p', { class: 'small muted' }, t('common.noData'))];
 
@@ -1194,9 +1198,7 @@ window.addEventListener('readfast:storage-error', () => {
   alert(m('common.storage_error'));
 });
 
-window.addEventListener('readfast:drill-state', event => {
-  drillActive = event.detail?.active === true;
-});
+window.addEventListener('readfast:drill-state', event => setDrillActive(event.detail?.active === true));
 
 window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
   if ((store.getSetting('theme') || 'auto') === 'auto') applyTheme();

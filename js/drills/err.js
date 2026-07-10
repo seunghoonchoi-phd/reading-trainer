@@ -42,7 +42,7 @@ export default {
           h('p', { class: 'muted' }, t('drill.err.instructions')),
           tierPicker(lang, tier, next => { tier = next; setup(); }),
           h('hr', { class: 'sep' }),
-          h('label', { class: 'row', style: { gap: '10px', cursor: 'pointer' } },
+          h('label', { class: 'row check-row', style: { gap: '10px', cursor: 'pointer' } },
             h('input', { type: 'checkbox', checked: usePacer, onChange: event => { usePacer = event.target.checked; } }),
             h('span', null, t('drill.err.pacer_toggle', { pace, unit: unitLabel(lang) }))),
           h('div', { class: 'note small', style: { marginTop: '10px' } }, t('drill.err.pacer_benchmark_note')),

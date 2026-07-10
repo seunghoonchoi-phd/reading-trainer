@@ -1,7 +1,7 @@
 // ===== service worker: bounded same-origin offline cache =====
 const CACHE_PREFIX = 'readfast-';
-const PRECACHE = 'readfast-precache-v16';
-const RUNTIME = 'readfast-runtime-v16';
+const PRECACHE = 'readfast-precache-v17';
+const RUNTIME = 'readfast-runtime-v17';
 const RUNTIME_LIMIT = 48;
 
 // This array is parsed by _build/test-assets.mjs. Keep it as valid JSON.

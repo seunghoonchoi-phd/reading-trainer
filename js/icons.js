@@ -38,7 +38,7 @@ export const ICONS = {
   globe:     SVG('<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.3 2.3 3.5 5.3 3.5 8.5S14.3 18.2 12 20.5C9.7 18.2 8.5 15.2 8.5 12S9.7 5.8 12 3.5Z"/>'),
   dot:       SVG('<circle cx="12" cy="12" r="3.4" fill="currentColor" stroke="none"/>'),
   cards:     SVG('<rect x="6.5" y="3.5" width="14" height="11" rx="1.5"/><path d="M4 8.5v9A2.5 2.5 0 0 0 6.5 20H17"/><path d="M10.5 7.5h6M10.5 10.5h3.5"/>'), // stacked flashcards
-  gear:      SVG('<circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.6M12 18.6v2.6M2.8 12h2.6M18.6 12h2.6M5.5 5.5l1.85 1.85M16.65 16.65l1.85 1.85M18.5 5.5l-1.85 1.85M7.35 16.65 5.5 18.5"/>'),
+  gear:      SVG('<path d="M3 6h6M13 6h8M3 12h10M17 12h4M3 18h4M11 18h10"/><circle cx="11" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="18" r="2"/>'), // sliders — visually distinct from the sun icon
   install:   SVG('<path d="M12 3.5v11M8 10.5l4 4 4-4"/><path d="M4.5 16.5v2.5a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-2.5"/>'),
   brand:     SVG('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3"/>', 2), // reticle — 초점(정독)의 시각화, icon.svg와 동일 모티프
   level:     SVG('<path d="M4 20v-5M9.3 20v-9M14.6 20V7M20 20V3.8"/>', 2.2), // ascending bars — 레벨
