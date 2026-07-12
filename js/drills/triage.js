@@ -4,7 +4,7 @@ import * as content from '../content.js';
 import { splitParagraphs, splitSentences } from '../content.js';
 import { t } from '../i18n.js';
 import {
-  drillHeader, resultCard, createDrillTimer, drillTimerElement,
+  drillHeader, trainingRationale, resultCard, createDrillTimer, drillTimerElement,
   preferredTier, normalizeDrillOptions, markPassageStarted,
   recordAttempt, attemptErrorNote, attemptContext, currentDifficulty,
   pickPracticePassage, recentPracticePassageIds,
@@ -34,7 +34,7 @@ export default {
     const customText = normalizedOptions.customText;
     const context = attemptContext(normalizedOptions);
     const name = t(this.nameKey);
-    const why = t(this.whyKey);
+    const why = trainingRationale(this.id, t(this.whyKey));
     const source = customText || pickPracticePassage(lang, {
       tier: preferredTier(lang, { hardest: true }),
       preferredIds: recentPracticePassageIds(lang),

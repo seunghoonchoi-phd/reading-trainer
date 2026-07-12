@@ -4,7 +4,7 @@ import * as content from '../content.js';
 import * as store from '../store.js';
 import { t } from '../i18n.js';
 import {
-  drillHeader, compQuiz, resultCard, tierPicker, preferredTier,
+  drillHeader, trainingRationale, compQuiz, resultCard, tierPicker, preferredTier,
   markPassageStarted, recordAttempt, attemptErrorNote, attemptContext, currentDifficulty,
   pickPracticePassage, recentPracticePassageIds,
 } from './shared.js';
@@ -28,7 +28,7 @@ export default {
 
   render(root, lang, exit, options = {}) {
     const name = t(this.nameKey);
-    const why = t(this.whyKey);
+    const why = trainingRationale(this.id, t(this.whyKey));
     const context = attemptContext(options);
     const difficulty = currentDifficulty(lang);
     let tier = preferredTier(lang);

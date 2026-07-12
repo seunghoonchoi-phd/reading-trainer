@@ -2,7 +2,7 @@
 import { h, mount, shuffle } from '../util.js';
 import * as content from '../content.js';
 import { t } from '../i18n.js';
-import { drillHeader, resultCard, preferredTier, recordAttempt, attemptErrorNote, attemptContext, currentDifficulty } from './shared.js';
+import { drillHeader, trainingRationale, resultCard, preferredTier, recordAttempt, attemptErrorNote, attemptContext, currentDifficulty } from './shared.js';
 
 export function goldBoundaryCuts(words) {
   const cuts = new Set();
@@ -37,7 +37,7 @@ export default {
 
   render(root, lang, exit, options = {}) {
     const name = t(this.nameKey);
-    const why = t(this.whyKey);
+    const why = trainingRationale(this.id, t(this.whyKey));
     const context = attemptContext(options);
     const difficulty = currentDifficulty('zh');
     const allItems = content.data().segZh.sentences || [];

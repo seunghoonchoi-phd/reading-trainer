@@ -1,4 +1,4 @@
-// ===== content.js — corpus loading, selection, tokenization, auto-cloze =====
+﻿// ===== content.js — corpus loading, selection, tokenization, auto-cloze =====
 import { countUnits, shuffle, sample } from './util.js';
 import * as store from './store.js';
 import { difficultyFromLegacyLevel, normalizeDifficulty } from './levels.js';
@@ -66,6 +66,8 @@ const SEED = {
 };
 
 let DATA = null;
+const koreanTranslationCache = new Map();
+const TRANSLATION_CHUNK_LIMIT = 3600;
 
 async function tryFetch(path) {
   try { const r = await fetch(path, { cache: 'no-cache' }); if (r.ok) return await r.json(); } catch {}
@@ -90,6 +92,65 @@ export async function loadContent() {
   return DATA;
 }
 export const data = () => DATA;
+
+function splitForTranslation(text) {
+  const paragraphs = String(text || '').split(/(\n\s*\n)/);
+  const chunks = [];
+  let buffer = '';
+  const push = () => {
+    if (buffer) chunks.push(buffer);
+    buffer = '';
+  };
+  for (const part of paragraphs) {
+    if ((buffer + part).length <= TRANSLATION_CHUNK_LIMIT) {
+      buffer += part;
+      continue;
+    }
+    push();
+    for (let index = 0; index < part.length; index += TRANSLATION_CHUNK_LIMIT) {
+      chunks.push(part.slice(index, index + TRANSLATION_CHUNK_LIMIT));
+    }
+  }
+  push();
+  return chunks.filter(Boolean);
+}
+
+async function translateChunkToKorean(text, lang) {
+  const url = new URL('https://translate.googleapis.com/translate_a/single');
+  url.searchParams.set('client', 'gtx');
+  url.searchParams.set('sl', lang === 'zh' ? 'zh-CN' : 'en');
+  url.searchParams.set('tl', 'ko');
+  url.searchParams.set('dt', 't');
+  url.searchParams.set('q', text);
+  const response = await fetch(url.toString(), { cache: 'no-store' });
+  if (!response.ok) throw new Error(`TRANSLATION_HTTP_${response.status}`);
+  const payload = await response.json();
+  const translated = Array.isArray(payload?.[0])
+    ? payload[0].map(part => part?.[0] || '').join('')
+    : '';
+  if (!translated.trim()) throw new Error('TRANSLATION_EMPTY');
+  return translated;
+}
+
+export async function koreanTranslationFor(passage) {
+  const text = String(passage?.text || '').trim();
+  if (!text) throw new Error('TRANSLATION_NO_TEXT');
+  const key = passage?.id || `${passage?.lang || 'en'}:${text}`;
+  if (koreanTranslationCache.has(key)) return koreanTranslationCache.get(key);
+  const task = (async () => {
+    const pieces = splitForTranslation(text);
+    const translated = [];
+    for (const piece of pieces) translated.push(await translateChunkToKorean(piece, passage?.lang));
+    return translated.join('');
+  })();
+  koreanTranslationCache.set(key, task);
+  try {
+    return await task;
+  } catch (error) {
+    koreanTranslationCache.delete(key);
+    throw error;
+  }
+}
 
 /* ---- selection ---- */
 export function passagesFor(lang, tier) {

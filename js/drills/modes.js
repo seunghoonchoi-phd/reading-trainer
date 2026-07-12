@@ -4,7 +4,7 @@ import * as content from '../content.js';
 import * as store from '../store.js';
 import { t } from '../i18n.js';
 import {
-  drillHeader, compQuiz, askMCQ, resultCard, tierPicker,
+  drillHeader, trainingRationale, compQuiz, askMCQ, resultCard, tierPicker,
   createDrillTimer, pickUnseenPassage, markPassageStarted,
   askFatigue, recordAttempt, attemptErrorNote, timingValidity,
   questionTypeBreakdown,
@@ -34,7 +34,7 @@ export default {
 
   render(root, lang, exit, options = {}) {
     const name = t(this.nameKey);
-    const why = t(this.whyKey);
+    const why = trainingRationale(this.id, t(this.whyKey));
     const context = attemptContext(options);
     const prescribedSubmode = typeof options?.targetSubmode === 'string' ? options.targetSubmode : null;
     let tier = preferredTier(lang);

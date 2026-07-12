@@ -8,6 +8,8 @@ import { isBenchmarkAttempt } from '../metrics.js';
 
 /* ---- 활성 드릴 정리 훅: 한 화면에 여러 타이머·Promise가 있어도 모두 취소 ---- */
 const teardowns = new Set();
+let activePassage = null;
+const translationUsedPassages = new Set();
 export function setTeardown(fn) {
   let active = true;
   const wrapped = () => {
@@ -22,6 +24,7 @@ export function runTeardown() {
   const pending = [...teardowns];
   teardowns.clear();
   pending.forEach(fn => fn());
+  activePassage = null;
 }
 
 // setTimeout도 화면 생명주기에 묶는다. 취소되면 콜백은 실행되지 않는다.
@@ -208,17 +211,24 @@ export function pickAssessmentTransferPassage(base, excludeIds = []) {
 }
 
 export function markPassageStarted(p) {
-  if (!p || !p.id) return false;
+  if (!p) return false;
+  activePassage = p;
+  if (!p.id) return false;
   const novelAtStart = store.seenCount(p.id) === 0;
   store.markSeen(p.id);
   return novelAtStart;
 }
 
 export function recordAttempt(record) {
+  const passageIds = [record?.passageId, record?.sourcePassageId, record?.transferPassageId].filter(Boolean);
+  const translationUsed = passageIds.some(id => translationUsedPassages.has(id));
+  const normalizedRecord = translationUsed
+    ? { ...record, assisted: true, benchmark: false }
+    : record;
   try {
     const attempt = typeof store.addAttempt === 'function'
-      ? store.addAttempt(record)
-      : (store.logSession({ legacyAttempt: true, ...record }), record);
+      ? store.addAttempt(normalizedRecord)
+      : (store.logSession({ legacyAttempt: true, ...normalizedRecord }), normalizedRecord);
     return { attempt, error: null };
   } catch (error) {
     return { attempt: null, error };
@@ -287,7 +297,7 @@ export function askFatigue(root, title, exit) {
 }
 
 export function drillHeader(name, onExit, why) {
-  const whyNote = why ? h('div', { class: 'note small', style: { display: 'none', marginBottom: '12px' } }, why) : null;
+  const whyNote = why ? h('div', { class: 'note small', style: { display: 'none', marginBottom: '12px' } }, rationaleNode(why)) : null;
   const chip = why ? h('button', {
     class: 'chip chip--btn', type: 'button', 'aria-expanded': 'false',
     onClick: () => {
@@ -301,8 +311,127 @@ export function drillHeader(name, onExit, why) {
       h('div', { class: 'row', style: { gap: '10px' } },
         h('button', { class: 'iconbtn', onClick: onExit, title: t('drill.shared.back_to_list'), 'aria-label': t('drill.shared.back') }, '‹'),
         h('div', null, h('div', { style: { fontWeight: '800' } }, name))),
-      chip),
-    whyNote);
+       chip),
+    whyNote,
+    activePassage ? translationPanel(activePassage) : null);
+}
+
+function rationaleNode(rationale) {
+  if (typeof rationale === 'string') return rationale;
+  return h('div', { class: 'stack', style: { gap: '10px' } },
+    h('div', null, h('b', null, getUILang() === 'en' ? 'Training intent' : '훈련 의도'), h('p', { style: { margin: '4px 0 0' } }, rationale.intent)),
+    h('div', null, h('b', null, getUILang() === 'en' ? 'Training mechanism' : '훈련 메커니즘'), h('p', { style: { margin: '4px 0 0' } }, rationale.mechanism)),
+    h('div', { class: 'small muted' }, getUILang() === 'en' ? 'Original sources' : '근거 원문', ': ',
+      ...rationale.sources.flatMap((source, index) => [
+        index ? document.createTextNode(' · ') : null,
+        h('a', { href: source.href, target: '_blank', rel: 'noopener noreferrer' }, source.label),
+      ].filter(Boolean))));
+}
+
+function translationPanel(passage) {
+  const key = passage.id || `${passage.lang || 'en'}:${passage.text}`;
+  const englishUi = getUILang() === 'en';
+  const panel = h('div', { class: 'note small', style: { display: 'none', marginBottom: '12px' } });
+  const button = h('button', {
+    class: 'chip chip--btn', type: 'button', 'aria-expanded': 'false',
+    onClick: async () => {
+      const open = panel.style.display !== 'none';
+      if (open) {
+        panel.style.display = 'none';
+        button.setAttribute('aria-expanded', 'false');
+        return;
+      }
+      translationUsedPassages.add(key);
+      panel.style.display = '';
+      button.setAttribute('aria-expanded', 'true');
+      button.disabled = true;
+      mount(panel, h('span', { class: 'muted' }, englishUi ? 'Loading Korean translation…' : '한국어 전문을 불러오는 중입니다…'));
+      try {
+        const translated = await content.koreanTranslationFor(passage);
+        mount(panel,
+          h('div', { style: { fontWeight: '800', marginBottom: '6px' } }, englishUi ? 'Korean full translation' : '한국어 전문'),
+          h('div', { style: { whiteSpace: 'pre-wrap', lineHeight: '1.7' } }, translated),
+          h('p', { class: 'small muted', style: { margin: '10px 0 0' } }, englishUi
+            ? 'Machine translation is a support tool. This attempt is recorded as assisted and is excluded from the no-help speed baseline.'
+            : '이 번역은 단어 때문에 멈추지 않도록 돕는 기계 번역입니다. 앱은 이번 시도를 도움 사용으로 기록하고, 무도움 속도 기준선에서 제외합니다.'));
+      } catch {
+        mount(panel, h('span', { class: 'muted' }, englishUi
+          ? 'The translation could not be loaded. Please try again with an internet connection.'
+          : '번역을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요.'));
+      } finally {
+        button.disabled = false;
+      }
+    },
+  }, englishUi ? 'View Korean translation' : '한국어 전문 보기');
+  return h('div', { style: { marginBottom: '12px' } }, button, panel);
+}
+
+const SOURCES = {
+  speed: { label: 'Rayner et al. (2016)', href: 'https://pubmed.ncbi.nlm.nih.gov/26769745/' },
+  fluency: { label: 'NICHD National Reading Panel: Fluency', href: 'https://www.nichd.nih.gov/sites/default/files/publications/pubs/nrp/Documents/ch3.pdf' },
+  comprehension: { label: 'NICHD National Reading Panel: Comprehension', href: 'https://www.nichd.nih.gov/sites/default/files/publications/pubs/nrp/Documents/ch4-II.pdf' },
+  spacing: { label: 'Cepeda et al. (2006)', href: 'https://digitalcommons.usf.edu/psy_facpub/1771/' },
+  retrieval: { label: 'Roediger & Karpicke (2006)', href: 'https://pubmed.ncbi.nlm.nih.gov/16507066/' },
+  purpose: { label: 'McCrudden & Schraw (2007)', href: 'https://doi.org/10.1007/s10648-006-9010-7' },
+  triage: { label: 'Keshav, How to Read a Paper (2007)', href: 'https://svr-sk818-web.cl.cam.ac.uk/keshav/publications/htrap.html' },
+};
+
+const RATIONALES = {
+  err: {
+    ko: ['사용자는 읽기 속도와 이해가 함께 유지되는 범위를 확인합니다.', '사용자는 처음 보는 글을 읽고 문항을 풉니다. 앱은 읽은 시간과 문항 결과를 따로 기록합니다. 앱은 두 결과를 한 점수로 합치지 않습니다.', [SOURCES.speed]],
+    en: ['Check the range in which reading speed and understanding are both maintained.', 'Read an unseen passage and answer questions. The app stores reading time and question performance separately instead of merging them into one score.', [SOURCES.speed]],
+  },
+  repeated: {
+    ko: ['사용자는 같은 글에서 빨라진 결과가 새 글에서도 유지되는지 확인합니다.', '사용자는 같은 글을 여러 번 읽은 뒤, 처음 보는 관련 글을 읽고 문항을 풉니다. 앱은 같은 글의 반복 결과와 새 글 결과를 구분합니다.', [SOURCES.fluency]],
+    en: ['Check whether a gain on a familiar passage carries over to a new passage.', 'Read one passage repeatedly, then read an unseen related passage and answer questions. The app keeps familiar-passage results separate from transfer results.', [SOURCES.fluency]],
+  },
+  modes: {
+    ko: ['사용자는 읽는 목적에 따라 필요한 정보를 다르게 선택합니다.', '사용자는 정확히 읽기, 핵심 파악, 정보 찾기 중 한 목적을 고릅니다. 앱은 각 목적에 맞는 문항과 기록을 따로 제공합니다.', [SOURCES.purpose, SOURCES.speed]],
+    en: ['Select information differently for different reading purposes.', 'Choose close reading, main-idea reading, or information locating. The app uses task-specific questions and keeps their results separate.', [SOURCES.purpose, SOURCES.speed]],
+  },
+  chunk: {
+    ko: ['사용자는 긴 영어 문장에서 의미가 이어지는 구를 먼저 인식합니다.', '앱은 구 경계를 표시한 상태에서 읽게 한 뒤, 표시를 줄이거나 없앤 상태에서도 읽게 합니다. 표시를 본 결과는 무도움 결과와 구분합니다.', [SOURCES.speed, SOURCES.comprehension]],
+    en: ['Recognize phrase units that carry meaning in long English sentences.', 'The app first displays phrase boundaries, then reduces or removes them. Results with visible boundaries remain separate from no-help results.', [SOURCES.speed, SOURCES.comprehension]],
+  },
+  zhchar: {
+    ko: ['사용자는 느리거나 자주 틀리는 중국어 글자를 다시 확인합니다.', '앱은 오답과 느린 글자를 다시 섞어 제시하고, 같은 항목을 한 번에 몰아 내지 않고 다음 연습에 다시 배치합니다.', [SOURCES.spacing]],
+    en: ['Revisit Chinese characters that are slow or often missed.', 'The app brings back missed and slow characters in later practice instead of presenting all repetitions at once.', [SOURCES.spacing]],
+  },
+  zhseg: {
+    ko: ['사용자는 중국어 문장에서 단어 경계를 빠르게 구분합니다.', '사용자는 붙어 있는 문장을 단어 단위로 나누고, 앱은 오답 항목을 뒤 연습에 다시 섞어 제시합니다.', [SOURCES.spacing]],
+    en: ['Identify word boundaries quickly in continuous Chinese text.', 'Split an unspaced sentence into words. The app returns missed items in later practice.', [SOURCES.spacing]],
+  },
+  conquer: {
+    ko: ['사용자는 한 지문을 여러 방식으로 다시 다루고, 새 글에서 이해를 확인합니다.', '사용자는 핵심 확인, 반복 읽기, 짧은 확인 문항을 순서대로 수행한 뒤 처음 보는 관련 글을 풉니다. 앱은 반복 단계와 새 글 단계를 구분합니다.', [SOURCES.fluency, SOURCES.retrieval]],
+    en: ['Work through one passage in several ways, then check understanding on a new passage.', 'Complete a main-idea check, repeated reading, and short checks, then answer questions on an unseen related passage. The app separates repeated and transfer stages.', [SOURCES.fluency, SOURCES.retrieval]],
+  },
+  sentence: {
+    ko: ['사용자는 문장이 원문 의미와 맞는지 확인하며 이해의 빈틈을 찾습니다.', '앱은 지문에서 문장을 만들고, 사용자는 문장 내용이 원문과 맞는지 판정합니다. 즉시 피드백으로 어떤 근거를 놓쳤는지 확인합니다.', [SOURCES.comprehension]],
+    en: ['Find gaps in comprehension by checking whether sentences match the passage meaning.', 'The app creates statements from a passage and asks whether each matches the text. Immediate feedback identifies the missed evidence.', [SOURCES.comprehension]],
+  },
+  context: {
+    ko: ['사용자는 주변 문장에 있는 단서로 빠진 정보를 추론합니다.', '앱은 문맥이 있는 문장에서 한 부분을 비우고, 사용자는 주변 정보로 답을 고릅니다. 피드백은 답의 근거가 된 문장 정보를 알려 줍니다.', [SOURCES.comprehension]],
+    en: ['Infer missing information from cues in the surrounding sentences.', 'The app removes one part from a contextual sentence and asks the reader to choose from the surrounding evidence. Feedback points to the supporting information.', [SOURCES.comprehension]],
+  },
+  retrieval: {
+    ko: ['사용자는 글을 덮은 뒤 기억에서 내용을 꺼내며 이해의 빈칸을 확인합니다.', '사용자는 원문을 보지 않고 핵심을 적고 자기 말로 설명합니다. 이후 앱은 원문 핵심과 문항으로 결과를 대조하게 합니다.', [SOURCES.retrieval, SOURCES.comprehension]],
+    en: ['Expose gaps in understanding by retrieving the passage from memory.', 'Write the main idea and explain it without viewing the passage, then compare the result with the passage focus and questions.', [SOURCES.retrieval, SOURCES.comprehension]],
+  },
+  preview: {
+    ko: ['사용자는 글을 읽기 전에 문단 구조로 읽을 목표를 세웁니다.', '사용자는 각 문단의 첫 문장을 보고 글의 방향을 예측한 뒤 전체 글과 비교합니다. 이 훈련은 시야를 넓히는 훈련이 아니라, 어디를 자세히 읽을지 정하는 훈련입니다.', [SOURCES.purpose, SOURCES.comprehension]],
+    en: ['Set a reading goal from paragraph structure before reading the full text.', 'Predict the direction of a text from each paragraph’s first sentence, then compare that prediction with the full passage. This is not a visual-span exercise; it is a way to choose where close reading is needed.', [SOURCES.purpose, SOURCES.comprehension]],
+  },
+  triage: {
+    ko: ['사용자는 모든 논문에 같은 시간을 쓰지 않고, 읽을 깊이를 먼저 결정합니다.', '사용자는 제목·구조를 보는 1패스, 핵심을 확인하는 2패스, 근거를 검토하는 3패스를 차례로 수행합니다. 이 도구는 논문 읽기 순서를 돕고 속독 능력을 측정하지 않습니다.', [SOURCES.triage]],
+    en: ['Choose reading depth instead of spending the same time on every paper.', 'Use a first pass for title and structure, a second pass for the main idea, and a third pass for evidence. This tool organizes paper reading; it does not measure speed-reading skill.', [SOURCES.triage]],
+  },
+};
+
+export function trainingRationale(id, fallback) {
+  const entry = RATIONALES[id];
+  if (!entry) return fallback;
+  const [intent, mechanism, sources] = getUILang() === 'en' ? entry.en : entry.ko;
+  return { intent, mechanism, sources };
 }
 
 export function whyBox(text) {

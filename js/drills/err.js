@@ -4,7 +4,7 @@ import * as content from '../content.js';
 import * as store from '../store.js';
 import { t } from '../i18n.js';
 import {
-  drillHeader, compQuiz, resultCard, tierPicker, tierLabel,
+  drillHeader, trainingRationale, compQuiz, resultCard, tierPicker, tierLabel,
   setTeardown, schedule, createDrillTimer, pickAssessmentPassage,
   markPassageStarted, askFatigue, recordAttempt, attemptErrorNote,
   timingValidity, preferredTier, drillTimerElement, reducedMotion, attemptContext, applyBenchmarkPace, benchmarkEligible,
@@ -27,7 +27,7 @@ export default {
 
   render(root, lang, exit, options = {}) {
     const name = t(this.nameKey);
-    const why = t(this.whyKey);
+    const why = trainingRationale(this.id, t(this.whyKey));
     const context = attemptContext(options);
     let tier = preferredTier(lang);
     let usePacer = false;

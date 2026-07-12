@@ -4,7 +4,7 @@ import * as content from '../content.js';
 import * as store from '../store.js';
 import { inBand } from '../levels.js';
 import { t } from '../i18n.js';
-import { drillHeader, askMCQ, resultCard, recordAttempt, attemptErrorNote, attemptContext, currentDifficulty } from './shared.js';
+import { drillHeader, trainingRationale, askMCQ, resultCard, recordAttempt, attemptErrorNote, attemptContext, currentDifficulty } from './shared.js';
 
 export function buildZhCharPool(items, hardKeys, levelKey, limit = 12) {
   const hard = hardKeys.map(key => items.find(item => item.hanzi === key)).filter(Boolean).slice(0, Math.min(4, limit));
@@ -33,7 +33,7 @@ export default {
 
   render(root, lang, exit, options = {}) {
     const name = t(this.nameKey);
-    const why = t(this.whyKey);
+    const why = trainingRationale(this.id, t(this.whyKey));
     const context = attemptContext(options);
     const difficulty = currentDifficulty('zh');
     const items = content.data().vocabZh.items || [];
