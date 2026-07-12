@@ -619,6 +619,7 @@ button.cycle-step:hover { border-color: var(--accent); }
 .library-passage__heading { margin: 0 0 10px; font-size: .86rem; color: var(--ink-faint); }
 .library-passage__text { white-space: pre-wrap; font-size: 1rem; line-height: 1.8; word-break: normal; overflow-wrap: break-word; }
 .library-passage__text--ko { word-break: keep-all; }
+.library-reading-marker { display: inline-block; width: 0; height: 1.7em; margin: 0; vertical-align: middle; border-inline-start: 4px solid var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent); }
 hr.sep { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
 label.field, p.field { display: block; font-weight: 700; font-size: .85rem; margin-bottom: 6px; }
 label.field > :is(textarea, input, select) { margin-top: 6px; font-weight: 400; }

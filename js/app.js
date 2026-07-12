@@ -80,6 +80,13 @@ registerMessages('ko', {
   'app.library.source': '원문',
   'app.library.korean': '한국어 전문',
   'app.library.translation_missing': '한국어 전문을 준비하지 못했습니다.',
+  'app.library.progress_help': '원문이나 한국어 전문에서 원하는 위치를 클릭하면 읽기 마커가 생깁니다. Ctrl+S로 저장하고 Ctrl+E로 마커 위치로 돌아갑니다.',
+  'app.library.marker_go': '마커 위치로 이동',
+  'app.library.marker_save': '마커 저장',
+  'app.library.marker_reset': '마커 지우기',
+  'app.library.marker_none': '아직 읽기 마커가 없습니다.',
+  'app.library.marker_unsaved': '현재 마커는 아직 저장하지 않았습니다.',
+  'app.library.marker_saved': '읽기 마커를 저장했습니다.',
   'app.library.sentences_title': '중국어 단어 분할 문장',
   'app.library.sentences_lead': '중국어 단어 분할 훈련에서 쓰는 모든 문장입니다.',
   'app.plan.prepare': '준비',
@@ -272,6 +279,13 @@ registerMessages('en', {
   'app.library.source': 'Original text',
   'app.library.korean': 'Korean full translation',
   'app.library.translation_missing': 'A Korean full translation is unavailable.',
+  'app.library.progress_help': 'Click a position in either column to place a reading marker. Press Ctrl+S to save it and Ctrl+E to return to it.',
+  'app.library.marker_go': 'Go to marker',
+  'app.library.marker_save': 'Save marker',
+  'app.library.marker_reset': 'Clear marker',
+  'app.library.marker_none': 'No reading marker has been placed.',
+  'app.library.marker_unsaved': 'The current marker has not been saved yet.',
+  'app.library.marker_saved': 'Reading marker saved.',
   'app.library.sentences_title': 'Chinese word-segmentation sentences',
   'app.library.sentences_lead': 'Every sentence used in Chinese word-segmentation practice.',
   'app.plan.prepare': 'Prepare',
@@ -789,20 +803,119 @@ function renderTrain() {
         ...groups))));
 }
 
+const LIBRARY_MARKERS_KEY = 'libraryReadingMarkers';
+let libraryMarkerDrafts = {};
+
+function savedLibraryMarkers() {
+  const saved = store.getSetting(LIBRARY_MARKERS_KEY);
+  return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+}
+
+function validLibraryMarker(marker) {
+  return marker && typeof marker.passageId === 'string' && typeof marker.side === 'string' && Number.isInteger(marker.offset);
+}
+
+function activeLibraryMarker(libraryLang) {
+  const draft = libraryMarkerDrafts[libraryLang];
+  return validLibraryMarker(draft) ? draft : (validLibraryMarker(savedLibraryMarkers()[libraryLang]) ? savedLibraryMarkers()[libraryLang] : null);
+}
+
+function textOffsetWithin(container, node, offset) {
+  const range = document.createRange();
+  range.selectNodeContents(container);
+  range.setEnd(node, offset);
+  return range.toString().length;
+}
+
+function caretRangeAtPoint(x, y) {
+  if (document.caretPositionFromPoint) {
+    const point = document.caretPositionFromPoint(x, y);
+    if (!point) return null;
+    const range = document.createRange();
+    range.setStart(point.offsetNode, point.offset);
+    range.collapse(true);
+    return range;
+  }
+  return document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
+}
+
+function placeLibraryMarker(event, passageId, side, text, libraryLang) {
+  const selected = caretRangeAtPoint(event.clientX, event.clientY);
+  if (!selected) return;
+  const container = event.currentTarget;
+  if (!container.contains(selected.startContainer) || !container.contains(selected.endContainer)) return;
+  const offset = Math.max(0, Math.min(text.length, textOffsetWithin(container, selected.startContainer, selected.startOffset)));
+  libraryMarkerDrafts = { ...libraryMarkerDrafts, [libraryLang]: { passageId, side, offset } };
+  const scrollY = window.scrollY;
+  window.setTimeout(() => {
+    renderLibrary();
+    window.scrollTo({ top: scrollY, behavior: 'auto' });
+  }, 0);
+}
+
+function saveLibraryMarker() {
+  const marker = libraryMarkerDrafts[lang];
+  if (!validLibraryMarker(marker)) return false;
+  const next = structuredClone(savedLibraryMarkers());
+  next[lang] = marker;
+  if (!store.setSetting(LIBRARY_MARKERS_KEY, next)) return false;
+  const { [lang]: _, ...rest } = libraryMarkerDrafts;
+  libraryMarkerDrafts = rest;
+  renderLibrary();
+  return true;
+}
+
+function resetLibraryMarker() {
+  const next = structuredClone(savedLibraryMarkers());
+  delete next[lang];
+  if (!store.setSetting(LIBRARY_MARKERS_KEY, next)) return;
+  const { [lang]: _, ...rest } = libraryMarkerDrafts;
+  libraryMarkerDrafts = rest;
+  renderLibrary();
+}
+
+function goToLibraryMarker() {
+  const marker = activeLibraryMarker(lang);
+  if (!marker) return false;
+  const target = document.getElementById('library-reading-marker');
+  if (!target) return false;
+  target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  return true;
+}
+
+function markerText(text, marker, passageId, side) {
+  if (!marker || marker.passageId !== passageId || marker.side !== side) return text;
+  const offset = Math.max(0, Math.min(text.length, marker.offset));
+  return [
+    text.slice(0, offset),
+    h('span', { id: 'library-reading-marker', class: 'library-reading-marker', title: m('library.marker_go') }),
+    text.slice(offset),
+  ];
+}
+
+function libraryTextPanel({ passageId, side, text, language, heading, libraryLang }) {
+  const marker = activeLibraryMarker(libraryLang);
+  return h('section', null,
+    h('h3', { class: 'library-passage__heading' }, heading),
+    h('div', {
+      class: 'library-passage__text' + (side === 'ko' ? ' library-passage__text--ko' : ''),
+      lang: language,
+      'data-lang': language === 'ko' ? null : language,
+      onClick: event => placeLibraryMarker(event, passageId, side, text, libraryLang),
+    }, markerText(text, marker, passageId, side)));
+}
+
 function libraryPassageCard(passage, libraryLang) {
   const unit = libraryLang === 'zh' ? '자' : 'words';
   const translated = content.koreanTranslationTextFor(passage) || m('library.translation_missing');
   return h('article', { class: 'card library-passage' },
     h('div', { class: 'row spread' },
-      h('strong', null, passage.title || m('common.no_passage')),
-      h('span', { class: 'small muted' }, `${passage.unit_count || countUnits(passage.text, libraryLang)} ${unit}`)),
+      h('div', null,
+        h('strong', null, passage.title || m('common.no_passage')),
+        h('span', { class: 'small muted', style: { marginLeft: '8px' } }, `${passage.unit_count || countUnits(passage.text, libraryLang)} ${unit}`))),
     h('div', { class: 'library-passage__pair' },
-      h('section', null,
-        h('h3', { class: 'library-passage__heading' }, m('library.source')),
-        h('div', { class: 'library-passage__text', lang: libraryLang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': libraryLang }, passage.text)),
-      h('section', null,
-        h('h3', { class: 'library-passage__heading' }, m('library.korean')),
-        h('div', { class: 'library-passage__text library-passage__text--ko', lang: 'ko' }, translated))));
+      libraryTextPanel({ passageId: passage.id, side: 'source', text: passage.text, language: libraryLang === 'zh' ? 'zh-Hans' : 'en', heading: m('library.source'), libraryLang }),
+      libraryTextPanel({ passageId: passage.id, side: 'ko', text: translated, language: 'ko', heading: m('library.korean'), libraryLang })));
 }
 
 function renderLibrary() {
@@ -819,10 +932,17 @@ function renderLibrary() {
   });
   const segmentation = libraryLang === 'zh' ? (content.data()?.segZh?.sentences || []).map((item, index) =>
     libraryPassageCard({ id: `zhseg-library-${index}`, title: item.text, text: item.text, lang: 'zh', unit_count: countUnits(item.text, 'zh') }, 'zh')) : [];
+  const marker = activeLibraryMarker(libraryLang);
   mount(view, h('div', { class: 'fade-in' },
     h('h1', { class: 'h1' }, m(`library.${libraryLang}.title`)),
     h('p', { class: 'lead' }, m(`library.${libraryLang}.lead`)),
-    h('p', { class: 'small muted' }, m('library.count', { count: passages.length })),
+    h('div', { class: 'row spread' },
+      h('p', { class: 'small muted' }, m('library.count', { count: passages.length })),
+      h('div', { class: 'btnrow' },
+        h('button', { class: 'btn btn--ghost', type: 'button', disabled: !marker, onClick: goToLibraryMarker }, `${m('library.marker_go')} (Ctrl+E)`),
+        h('button', { class: 'btn btn--ghost', type: 'button', disabled: !libraryMarkerDrafts[libraryLang], onClick: saveLibraryMarker }, `${m('library.marker_save')} (Ctrl+S)`),
+        h('button', { class: 'btn btn--ghost', type: 'button', disabled: !marker, onClick: resetLibraryMarker }, m('library.marker_reset')))),
+    h('p', { class: 'note small' }, marker ? (libraryMarkerDrafts[libraryLang] ? m('library.marker_unsaved') : m('library.marker_saved')) : m('library.progress_help')),
     ...groups,
     segmentation.length ? h('section', { style: { marginTop: '28px' } },
       h('h2', { class: 'h2' }, m('library.sentences_title')),
@@ -1272,6 +1392,18 @@ window.addEventListener('readfast:storage-error', () => {
 });
 
 window.addEventListener('readfast:drill-state', event => setDrillActive(event.detail?.active === true));
+
+window.addEventListener('keydown', event => {
+  if (route !== 'library' || !event.ctrlKey || event.altKey || event.metaKey) return;
+  const key = event.key.toLowerCase();
+  if (key === 's') {
+    event.preventDefault();
+    saveLibraryMarker();
+  } else if (key === 'e') {
+    event.preventDefault();
+    goToLibraryMarker();
+  }
+});
 
 window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', () => {
   if ((store.getSetting('theme') || 'auto') === 'auto') applyTheme();
