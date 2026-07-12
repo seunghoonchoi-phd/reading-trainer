@@ -631,6 +631,7 @@ button.cycle-step:hover { border-color: var(--accent); }
 .library-fixed__type { color: var(--ink-faint); font-size: .75rem; font-weight: 700; letter-spacing: .02em; }
 .library-fixed__item strong { color: var(--accent); }
 .library-fixed__meaning { color: var(--ink-muted); font-size: .92rem; line-height: 1.45; }
+.library-fixed__source { color: var(--ink-faint); font-size: .8rem; line-height: 1.4; }
 .library-reading-marker { display: inline-block; width: 0; height: 1.7em; margin: 0; vertical-align: middle; border-inline-start: 4px solid var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent); }
 hr.sep { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
 label.field, p.field { display: block; font-weight: 700; font-size: .85rem; margin-bottom: 6px; }

@@ -69,7 +69,7 @@ const CONTENT_STATE_KEY = '__readfastContentStateV1';
 const CONTENT_STATE = globalThis[CONTENT_STATE_KEY] ||= { data: null, koreanTranslationCache: new Map() };
 const TRANSLATION_CHUNK_LIMIT = 3600;
 // Bump when registered passage data changes. It bypasses a CDN copy that can outlive a new deploy.
-const CONTENT_REVISION = '20260713-34';
+const CONTENT_REVISION = '20260713-35';
 
 async function tryFetch(path) {
   const url = `${path}${path.includes('?') ? '&' : '?'}v=${CONTENT_REVISION}`;

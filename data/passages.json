@@ -50,39 +50,100 @@
     },
     "fixed_expressions": [
       {
-        "term": "拜他为师",
-        "meaning_ko": "그를 스승으로 모시다",
-        "kind": "collocation"
+        "term": "拜……为师",
+        "meaning_ko": "…를 스승으로 모시다",
+        "source_excerpt": "许多年轻人都想拜他为师",
+        "kind": "construction"
       },
       {
         "term": "得力助手",
-        "meaning_ko": "믿고 일을 맡길 수 있는 유능한 조수",
+        "meaning_ko": "능력이 있고 믿고 일을 맡길 수 있는 조수",
+        "source_excerpt": "成了老医生的得力助手",
         "kind": "collocation"
       },
       {
+        "term": "从四面八方",
+        "meaning_ko": "사방팔방에서",
+        "source_excerpt": "从四面八方来看病的人",
+        "kind": "idiom"
+      },
+      {
         "term": "与日俱增",
-        "meaning_ko": "날이 갈수록 함께 늘어나다",
-        "kind": "collocation"
+        "meaning_ko": "날이 갈수록 늘어나다",
+        "source_excerpt": "来看病的人与日俱增",
+        "kind": "idiom"
+      },
+      {
+        "term": "为了不让……",
+        "meaning_ko": "…하지 않도록 하기 위해",
+        "source_excerpt": "为了不让来看病的人等得太久",
+        "kind": "construction"
+      },
+      {
+        "term": "由……诊断",
+        "meaning_ko": "…가 진단을 맡다",
+        "source_excerpt": "由年轻医生诊断",
+        "kind": "construction"
+      },
+      {
+        "term": "越来越 + 形容词/动词",
+        "meaning_ko": "갈수록 더 …해지다",
+        "source_excerpt": "找年轻医生看病的人越来越多",
+        "kind": "construction"
       },
       {
         "term": "不以为然",
         "meaning_ko": "그렇게 생각하지 않거나 대수롭지 않게 여기다",
-        "kind": "collocation"
+        "source_excerpt": "老医生不以为然",
+        "kind": "idiom"
       },
       {
         "term": "百思不得其解",
         "meaning_ko": "아무리 생각해도 이유를 알 수 없다",
+        "source_excerpt": "对此，他百思不得其解",
+        "kind": "idiom"
+      },
+      {
+        "term": "以……的身份",
+        "meaning_ko": "…의 신분으로",
+        "source_excerpt": "以普通病人的身份去丈夫的医院看病",
+        "kind": "construction"
+      },
+      {
+        "term": "虽然……但/但是……",
+        "meaning_ko": "앞의 사실을 인정한 뒤, 뒤에서 그와 대비되는 내용을 잇는 양보 구조",
+        "source_excerpt": "虽然老医生和年轻医生已经分开看病，但病人等候的时间仍然比较长",
+        "kind": "connector"
+      },
+      {
+        "term": "跟……沟通",
+        "meaning_ko": "…와 충분히 소통하다",
+        "source_excerpt": "跟病人的沟通很多",
         "kind": "collocation"
+      },
+      {
+        "term": "给……加油打气",
+        "meaning_ko": "…를 격려하고 힘을 북돋다",
+        "source_excerpt": "经常给病人加油打气",
+        "kind": "collocation"
+      },
+      {
+        "term": "与……无关",
+        "meaning_ko": "…와 관계없다",
+        "source_excerpt": "与己无关的态度",
+        "kind": "collocation"
+      },
+      {
+        "term": "漫不经心",
+        "meaning_ko": "무심하고 건성으로 대하다",
+        "source_excerpt": "他看病时漫不经心",
+        "kind": "idiom"
       },
       {
         "term": "雪上加霜",
         "meaning_ko": "힘든 상황에 더 큰 어려움이 겹치다",
-        "kind": "collocation"
-      },
-      {
-        "term": "虽然……但……",
-        "meaning_ko": "비록 앞의 상황이 사실이지만, 뒤의 내용이 이어진다",
-        "kind": "paired"
+        "source_excerpt": "糟糕的心情雪上加霜",
+        "kind": "idiom"
       }
     ]
   }

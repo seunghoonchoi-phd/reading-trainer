@@ -4,7 +4,7 @@ import {
   median, setPressed,
 } from './util.js';
 import * as store from './store.js';
-import * as content from './content.js?v=20260713-34';
+import * as content from './content.js?v=20260713-35';
 import * as metrics from './metrics.js';
 import * as program from './program.js';
 import {
@@ -79,9 +79,12 @@ registerMessages('ko', {
   'app.library.translation_note': '이 번역은 단어 때문에 멈추지 않도록 돕는 기계 번역입니다.',
   'app.library.source': '원문',
   'app.library.korean': '한국어 전문',
-  'app.library.fixed_expressions': '固定搭配·연결 표현',
-  'app.library.expression.collocation': '고정표현',
-  'app.library.expression.paired': '연결 표현',
+  'app.library.fixed_expressions': '표현·문장 구조',
+  'app.library.expression.idiom': '성어',
+  'app.library.expression.collocation': '자주 쓰는 결합',
+  'app.library.expression.construction': '문장 구조',
+  'app.library.expression.connector': '연결 구조',
+  'app.library.expression.source': '본문: {excerpt}',
   'app.library.translation_missing': '한국어 전문을 준비하지 못했습니다.',
   'app.library.progress_help': '원문이나 한국어 전문에서 원하는 위치를 클릭하면 읽기 마커가 생깁니다. Ctrl+S로 저장하고 Ctrl+E로 마커 위치로 돌아갑니다.',
   'app.library.marker_go': '마커 위치로 이동',
@@ -284,9 +287,12 @@ registerMessages('en', {
   'app.library.translation_note': 'This machine translation is a support tool for vocabulary bottlenecks.',
   'app.library.source': 'Original text',
   'app.library.korean': 'Korean full translation',
-  'app.library.fixed_expressions': 'Fixed expressions and paired connectors',
-  'app.library.expression.collocation': 'Fixed expression',
-  'app.library.expression.paired': 'Paired connector',
+  'app.library.fixed_expressions': 'Expressions and sentence patterns',
+  'app.library.expression.idiom': 'Idiom',
+  'app.library.expression.collocation': 'Common collocation',
+  'app.library.expression.construction': 'Sentence pattern',
+  'app.library.expression.connector': 'Connector pattern',
+  'app.library.expression.source': 'Source: {excerpt}',
   'app.library.translation_missing': 'A Korean full translation is unavailable.',
   'app.library.progress_help': 'Click a position in either column to place a reading marker. Press Ctrl+S to save it and Ctrl+E to return to it.',
   'app.library.marker_go': 'Go to marker',
@@ -908,9 +914,10 @@ function libraryPassageCard(passage, libraryLang) {
           h('h3', { class: 'library-fixed__heading' }, m('library.fixed_expressions')),
           h('div', { class: 'stack' }, ...passage.fixed_expressions.map(item =>
             h('div', { class: 'library-fixed__item' },
-              h('span', { class: 'library-fixed__type' }, item.kind === 'paired' ? m('library.expression.paired') : m('library.expression.collocation')),
+              h('span', { class: 'library-fixed__type' }, m(`library.expression.${item.kind || 'collocation'}`)),
               h('strong', null, item.term),
-              h('span', { class: 'library-fixed__meaning' }, item.meaning_ko)))))
+              h('span', { class: 'library-fixed__meaning' }, item.meaning_ko),
+              item.source_excerpt ? h('span', { class: 'library-fixed__source' }, m('library.expression.source', { excerpt: item.source_excerpt })) : null))))
         : null));
 }
 
@@ -1403,7 +1410,7 @@ async function boot() {
   view.innerHTML = '<div class="empty">' + m('loading') + '</div>';
   await content.loadContent();
   render();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js?v=20260713-34').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js?v=20260713-35').catch(() => {});
 }
 
 boot();

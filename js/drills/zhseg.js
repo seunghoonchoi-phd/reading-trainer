@@ -1,6 +1,6 @@
 // ===== drills/zhseg.js — Chinese word-boundary support =====
 import { h, mount, shuffle } from '../util.js';
-import * as content from '../content.js?v=20260713-34';
+import * as content from '../content.js?v=20260713-35';
 import { t } from '../i18n.js';
 import { drillHeader, trainingRationale, resultCard, preferredTier, recordAttempt, attemptErrorNote, attemptContext, currentDifficulty } from './shared.js';
 

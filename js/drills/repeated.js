@@ -1,6 +1,6 @@
 // ===== drills/repeated.js — repeated reading plus genuinely unseen transfer =====
 import { h, mount, fmtClock, countUnits, sparkline } from '../util.js';
-import * as content from '../content.js?v=20260713-34';
+import * as content from '../content.js?v=20260713-35';
 import * as store from '../store.js';
 import { t } from '../i18n.js';
 import {
