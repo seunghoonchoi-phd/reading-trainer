@@ -891,16 +891,20 @@ function libraryPassageCard(passage, libraryLang) {
     h('div', { class: 'row spread' },
       h('div', null,
         h('strong', null, passage.title || m('common.no_passage')),
+        passage.title_ko ? h('span', { class: 'library-passage__title-ko' }, passage.title_ko) : null,
         h('span', { class: 'small muted', style: { marginLeft: '8px' } }, `${passage.unit_count || countUnits(passage.text, libraryLang)} ${unit}`))),
-    h('div', { class: 'library-passage__pair' },
-      libraryTextPanel({ passageId: passage.id, side: 'source', text: passage.text, language: libraryLang === 'zh' ? 'zh-Hans' : 'en', heading: m('library.source'), libraryLang }),
-      libraryTextPanel({ passageId: passage.id, side: 'ko', text: translated, language: 'ko', heading: m('library.korean'), libraryLang })),
-    libraryLang === 'zh' && Array.isArray(passage.fixed_expressions) && passage.fixed_expressions.length
-      ? h('section', { class: 'note small', style: { marginTop: '12px' } },
-        h('strong', null, m('library.fixed_expressions')),
-        h('div', { class: 'row', style: { gap: '8px', flexWrap: 'wrap', marginTop: '8px' } },
-          ...passage.fixed_expressions.map(item => h('span', { class: 'chip' }, `${item.term} · ${item.meaning_ko}`))))
-      : null);
+    h('div', { class: 'library-passage__layout' },
+      h('div', { class: 'library-passage__pair' },
+        libraryTextPanel({ passageId: passage.id, side: 'source', text: passage.text, language: libraryLang === 'zh' ? 'zh-Hans' : 'en', heading: m('library.source'), libraryLang }),
+        libraryTextPanel({ passageId: passage.id, side: 'ko', text: translated, language: 'ko', heading: m('library.korean'), libraryLang })),
+      libraryLang === 'zh' && Array.isArray(passage.fixed_expressions) && passage.fixed_expressions.length
+        ? h('aside', { class: 'library-fixed' },
+          h('h3', { class: 'library-fixed__heading' }, m('library.fixed_expressions')),
+          h('div', { class: 'stack' }, ...passage.fixed_expressions.map(item =>
+            h('div', { class: 'library-fixed__item' },
+              h('strong', null, item.term),
+              h('span', null, item.meaning_ko)))))
+        : null));
 }
 
 function renderLibrary() {

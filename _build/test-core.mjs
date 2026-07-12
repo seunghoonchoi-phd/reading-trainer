@@ -175,6 +175,8 @@ equal(content.passagesFor('en').length, 1, 'registered English passage is availa
 const chinese = content.passagesFor('zh');
 equal(chinese.length, 1, 'registered Chinese passage is available');
 equal(chinese[0].fixed_expressions.length, 6, 'registered Chinese passage keeps fixed expressions');
+equal(chinese[0].title_ko, '환자들이 젊은 의사를 선택한 이유', 'registered Chinese passage keeps the Korean title translation');
+equal(content.passagesFor('en')[0].title_ko, '입주 준비 팁', 'registered English passage keeps the Korean title translation');
 const registered = content.pickUnseenPassage('en', { tier: 1 });
 check(registered && registered.id === 'en-20260713-move-in-tips', 'registered passage is selectable');
 store.markSeen(registered.id);
