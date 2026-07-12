@@ -1,4 +1,4 @@
-// ===== drills/shared.js — common drill UI =====
+﻿// ===== drills/shared.js — common drill UI =====
 import { h, mount, letterFor, shuffle, createTimer } from '../util.js';
 import * as content from '../content.js';
 import * as store from '../store.js';
@@ -321,6 +321,10 @@ function rationaleNode(rationale) {
   return h('div', { class: 'stack', style: { gap: '10px' } },
     h('div', null, h('b', null, getUILang() === 'en' ? 'Training intent' : '훈련 의도'), h('p', { style: { margin: '4px 0 0' } }, rationale.intent)),
     h('div', null, h('b', null, getUILang() === 'en' ? 'Training mechanism' : '훈련 메커니즘'), h('p', { style: { margin: '4px 0 0' } }, rationale.mechanism)),
+    rationale.process?.length ? h('div', null,
+      h('b', null, getUILang() === 'en' ? 'How to do this training' : '훈련 순서'),
+      h('ol', { style: { margin: '6px 0 0', paddingInlineStart: '20px' } },
+        ...rationale.process.map(step => h('li', { style: { marginBottom: '4px' } }, step))) : null,
     h('div', { class: 'small muted' }, getUILang() === 'en' ? 'Original sources' : '근거 원문', ': ',
       ...rationale.sources.flatMap((source, index) => [
         index ? document.createTextNode(' · ') : null,
@@ -427,11 +431,62 @@ const RATIONALES = {
   },
 };
 
+const READING_MANUALS = {
+  err: {
+    ko: ['한국어 전문과 페이서를 끈 상태에서 처음 보는 지문을 처음부터 끝까지 읽습니다.', '지문을 다 읽으면 완료 버튼을 누릅니다.', '원문을 다시 보지 않고 이해 문항을 풉니다.', '결과에서 읽기 속도와 이해도를 따로 확인합니다.'],
+    en: ['Keep the Korean translation and pacer closed, then read the unseen passage from start to finish.', 'Press the finish button after reading.', 'Answer the comprehension questions without reopening the passage.', 'Check rate and comprehension as separate results.'],
+  },
+  repeated: {
+    ko: ['같은 지문을 첫 번째로 읽고 완료 버튼을 누릅니다.', '같은 지문을 정해진 횟수만큼 다시 읽습니다. 각 회차에서 완료 버튼을 누릅니다.', '반복 결과를 본 뒤 처음 보는 관련 지문을 읽습니다.', '새 지문의 이해 문항을 풀고 반복 결과와 새 지문 결과를 따로 봅니다.'],
+    en: ['Read the source passage once and finish it.', 'Reread the same passage for the requested number of passes, finishing each pass.', 'Then read the unseen related passage.', 'Answer its questions and compare repeated-reading results with the new-passage result.'],
+  },
+  modes: {
+    ko: ['먼저 정확히 읽기, 핵심 파악, 정보 찾기 중 오늘 연습할 목적을 하나 고릅니다.', '정확히 읽기에서는 세부 내용을 확인하며 읽습니다.', '핵심 파악에서는 각 문단의 중심 내용을 잡으며 읽습니다.', '정보 찾기에서는 질문에 필요한 단어와 숫자를 찾아 답합니다.'],
+    en: ['Choose close reading, main-idea reading, or information locating first.', 'For close reading, verify details.', 'For main-idea reading, identify the point of each paragraph.', 'For locating, search for the words or numbers needed for the question.'],
+  },
+  chunk: {
+    ko: ['구 경계가 보일 때는 한 단어씩 끊지 말고 표시된 구 단위로 읽습니다.', '다음 단계에서는 구 경계 표시가 줄어든 상태로 같은 방식으로 읽습니다.', '마지막에는 표시가 없는 문장에서 의미 단위를 스스로 찾습니다.', '문항을 풀고 구 경계 도움을 받은 결과와 무도움 결과를 구분합니다.'],
+    en: ['When phrase boundaries appear, read each displayed phrase as one unit.', 'Continue with fewer displayed boundaries.', 'Finally find phrase units yourself without visible boundaries.', 'Answer the question and keep supported and unsupported results separate.'],
+  },
+  zhchar: {
+    ko: ['화면의 한자를 먼저 봅니다.', '뜻이나 소리 단서를 본 뒤 해당 한자를 고릅니다.', '오답과 느린 항목은 다음 연습에서 다시 확인합니다.', '맞힌 항목은 바로 외웠다고 판단하지 말고 다음 간격 복습에서 다시 확인합니다.'],
+    en: ['Look at the Chinese character first.', 'Use the meaning or pronunciation cue, then choose the character.', 'Missed and slow items return in later practice.', 'Do not treat one correct response as permanent mastery; check it again later.'],
+  },
+  zhseg: {
+    ko: ['붙어 있는 중국어 문장을 처음부터 끝까지 봅니다.', '단어와 단어 사이를 나누어 표시합니다.', '답을 확인하고 틀린 경계를 다시 봅니다.', '오답 문장은 다음 연습에서 다시 나올 수 있습니다.'],
+    en: ['Read the unspaced Chinese sentence from beginning to end.', 'Mark the boundaries between words.', 'Check the answer and review any missed boundaries.', 'Missed sentences can return in later practice.'],
+  },
+  conquer: {
+    ko: ['처음 읽은 뒤 지문의 핵심을 고릅니다.', '같은 지문을 다시 읽고 짧은 확인 문항을 풉니다.', '반복 단계가 끝나면 처음 보는 관련 지문을 읽습니다.', '새 지문의 문항을 풀어 기억한 내용과 새 글 이해를 구분합니다.'],
+    en: ['After the first read, choose the passage main idea.', 'Reread the same passage and complete the short checks.', 'When the repeated stage ends, read an unseen related passage.', 'Answer its questions to separate familiarity from new-text understanding.'],
+  },
+  sentence: {
+    ko: ['먼저 원문을 읽습니다.', '화면에 나온 문장이 원문과 맞는지 판단합니다.', '즉시 피드백에서 원문 근거를 확인합니다.', '다음 문장에서도 원문을 다시 추측하지 말고 문장 의미를 대조합니다.'],
+    en: ['Read the original passage first.', 'Decide whether each displayed statement matches it.', 'Use immediate feedback to check the supporting evidence.', 'For the next statement, compare its meaning with the passage again.'],
+  },
+  context: {
+    ko: ['빈칸 앞뒤 문장을 먼저 읽습니다.', '문맥에 맞는 답을 하나 고릅니다.', '피드백에서 답을 지지하는 단서를 확인합니다.', '단어 하나만 보지 말고 문장 전체 정보를 사용합니다.'],
+    en: ['Read the sentences before and after the blank.', 'Choose one answer that fits the context.', 'Use feedback to identify the supporting cue.', 'Use the full sentence context instead of one word alone.'],
+  },
+  retrieval: {
+    ko: ['지문을 한 번 읽습니다.', '원문을 덮은 상태에서 기억나는 핵심을 적습니다.', '자기 말로 지문을 설명합니다.', '원문 핵심과 문항으로 설명이 맞는지 확인합니다.'],
+    en: ['Read the passage once.', 'With the passage hidden, write the main points you remember.', 'Explain the passage in your own words.', 'Use the passage focus and questions to check the explanation.'],
+  },
+  preview: {
+    ko: ['각 문단의 첫 문장만 봅니다.', '글 전체가 말할 내용을 예측합니다.', '예측 문항에 답합니다.', '전체 지문을 열어 예측과 실제 내용을 비교합니다.'],
+    en: ['Read only the first sentence of each paragraph.', 'Predict what the full text will say.', 'Answer the prediction question.', 'Open the full passage and compare the prediction with the text.'],
+  },
+  triage: {
+    ko: ['1패스에서 제목과 문단 첫 문장을 보고 글의 주제와 구조를 적습니다.', '더 읽을 가치가 있으면 2패스에서 전체 내용을 읽고 핵심을 요약합니다.', '근거를 검토해야 하면 3패스에서 주장과 자료를 확인합니다.', '더 읽지 않기로 정해도 그 결정을 기록하고 다음 글로 넘어갑니다.'],
+    en: ['In pass 1, use the title and paragraph openings to note the topic and structure.', 'If the text deserves more time, use pass 2 to read it fully and summarize the main point.', 'If evidence needs review, use pass 3 to check claims and support.', 'If you stop reading, record that decision and move to the next text.'],
+};
+
 export function trainingRationale(id, fallback) {
   const entry = RATIONALES[id];
   if (!entry) return fallback;
   const [intent, mechanism, sources] = getUILang() === 'en' ? entry.en : entry.ko;
-  return { intent, mechanism, sources };
+  const process = (getUILang() === 'en' ? READING_MANUALS[id]?.en : READING_MANUALS[id]?.ko) || [];
+  return { intent, mechanism, process, sources };
 }
 
 export function whyBox(text) {
