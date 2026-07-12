@@ -1,4 +1,4 @@
-// ===== app.js: shell, four-step program, settings, and progress =====
+﻿// ===== app.js: shell, four-step program, settings, and progress =====
 import {
   h, mount, $, $$, clear, countUnits, startTimer, fmtClock, sparkline,
   median, setPressed,
@@ -377,10 +377,10 @@ registerMessages('en', {
 
 const m = (key, params) => t('app.' + key, params || {});
 const view = $('#view');
-const ROUTES = ['home', 'train', 'mytexts', 'progress', 'theory', 'settings'];
-const TAB_ICON = { home: 'today', train: 'train', mytexts: 'mytexts', progress: 'progress', theory: 'theory' };
+const ROUTES = ['train', 'mytexts', 'progress', 'theory', 'settings'];
+const TAB_ICON = { train: 'train', mytexts: 'mytexts', progress: 'progress', theory: 'theory' };
 let lang = store.getSetting('lang') || 'en';
-let route = 'home';
+let route = 'train';
 let drillActive = false;
 let installPrompt = null;
 
@@ -506,8 +506,7 @@ function render() {
   setDrillActive(false);
   clear(view);
   window.scrollTo(0, 0);
-  if (route === 'home') renderHome();
-  else if (route === 'train') renderTrain();
+  if (route === 'train') renderTrain();
   else if (route === 'mytexts') renderMyTexts();
   else if (route === 'progress') renderProgress();
   else if (route === 'theory') renderTheory(view);
@@ -580,7 +579,7 @@ function drillGoal(drill) {
 
 function launch(drill, options = {}) {
   if (!drill || !drill.langs?.includes(lang) || !confirmLeave()) return;
-  const from = route === 'home' || route === 'train' ? route : 'train';
+  const from = route === 'train' ? route : 'train';
   const exit = () => {
     runTeardown();
     setDrillActive(false);
@@ -750,7 +749,7 @@ function renderTrain() {
     h('section', { class: 'card' },
       h('h2', { class: 'h2' }, m('train.cycle')),
       renderCycle(cycle)),
-    h('details', { class: 'drill-library' },
+    h('details', { class: 'drill-library', open: true },
       h('summary', null, m('train.library')),
       h('div', { class: 'drill-library__body' },
         h('p', { class: 'small muted' }, m('train.library_help')),
@@ -1029,7 +1028,7 @@ function renderSettings() {
       lang = store.getSetting('lang') || 'en';
       applyTheme();
       applyReadingSettings();
-      go('home');
+       go('train');
     } catch (error) {
       alert(m('settings.import_failed', { reason: error.code || error.message || m('common.error') }));
     }
@@ -1115,7 +1114,7 @@ function renderSettings() {
             if (confirm(m('settings.reset_progress_confirm'))) {
               try {
                 store.resetProgress();
-                go('home');
+                 go('train');
               } catch (error) {
                 alert(error.message || m('common.storage_error'));
               }
@@ -1129,7 +1128,7 @@ function renderSettings() {
             if (confirm(m('settings.reset_all_confirm1')) && confirm(m('settings.reset_all_confirm2'))) {
               try {
                 store.resetEverything();
-                go('home');
+                 go('train');
               } catch (error) {
                 alert(error.message || m('common.storage_error'));
               }
@@ -1160,7 +1159,7 @@ function changeTrainingLanguage(next) {
   render();
 }
 
-$('.appbar__brand')?.addEventListener('click', () => go('home'));
+$('.appbar__brand')?.addEventListener('click', () => go('train'));
 $('#settingsBtn')?.addEventListener('click', () => go('settings'));
 $('#uiLangToggle')?.addEventListener('click', event => {
   if (drillActive && !confirmLeave()) {
@@ -1211,7 +1210,10 @@ async function boot() {
   applyReadingSettings();
   paintTabIcons();
   const hash = location.hash.slice(1);
-  if (ROUTES.includes(hash)) route = hash;
+  if (hash === 'home') {
+    route = 'train';
+    history.replaceState(null, '', `${location.pathname}${location.search}#train`);
+  } else if (ROUTES.includes(hash)) route = hash;
   syncTabs();
   syncTrainingLanguage();
   if (store.getLoadIssue()) {
