@@ -324,7 +324,7 @@ function rationaleNode(rationale) {
     rationale.process?.length ? h('div', null,
       h('b', null, getUILang() === 'en' ? 'How to do this training' : '훈련 순서'),
       h('ol', { style: { margin: '6px 0 0', paddingInlineStart: '20px' } },
-        ...rationale.process.map(step => h('li', { style: { marginBottom: '4px' } }, step))) : null,
+        ...rationale.process.map(step => h('li', { style: { marginBottom: '4px' } }, step)))) : null,
     h('div', { class: 'small muted' }, getUILang() === 'en' ? 'Original sources' : '근거 원문', ': ',
       ...rationale.sources.flatMap((source, index) => [
         index ? document.createTextNode(' · ') : null,
