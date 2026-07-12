@@ -168,24 +168,17 @@ equal(store.streakFor('en', iso(4)).count, 1, 'long gap does not use a freeze');
 equal(store.streakFor('en', iso(10)).count, 0, 'stale streak is not displayed as current');
 equal(store.streakFor('zh', iso(4)).count, 0, 'language streaks separated');
 
-// Content selection honors exposure, exclusions, tier, and domain, never faking unseen fallback.
+// The shipped catalog contains only passages registered through the reading-training workflow.
 await content.loadContent();
 store.resetEverything();
-store.setDifficulty('en', 1);
-const first = content.pickUnseenPassage('en', { tier: 1 });
-check(first && first.lang === 'en' && first.tier === 1, 'unseen picker returns requested tier');
-store.markSeen(first.id);
-const second = content.pickUnseenPassage('en', { tier: 1, excludeIds: [first.id] });
-check(second && second.id !== first.id, 'unseen picker excludes prior passage');
-for (const passage of content.passagesFor('en', 1)) store.markSeen(passage.id);
-equal(content.pickUnseenPassage('en', { tier: 1 }), null, 'no unseen candidate returns null');
-
-store.resetEverything();
-const relatedBase = content.passagesFor('en', 4).find(passage => (passage.domain || 'general') === 'general');
-const related = content.relatedPassage(relatedBase, { unseenOnly: true, domain: 'general' });
-check(related && related.id !== relatedBase.id && (related.domain || 'general') === 'general', 'related unseen passage keeps domain');
-for (const passage of content.passagesFor('en', 4).filter(row => row.id !== relatedBase.id && (row.domain || 'general') === 'general')) store.markSeen(passage.id);
-equal(content.relatedPassage(relatedBase, { unseenOnly: true, domain: 'general' }), null, 'related unseen exhaustion returns null');
+equal(content.passagesFor('en').length, 1, 'registered English passage is available');
+const chinese = content.passagesFor('zh');
+equal(chinese.length, 1, 'registered Chinese passage is available');
+equal(chinese[0].fixed_expressions.length, 6, 'registered Chinese passage keeps fixed expressions');
+const registered = content.pickUnseenPassage('en', { tier: 1 });
+check(registered && registered.id === 'en-20260713-move-in-tips', 'registered passage is selectable');
+store.markSeen(registered.id);
+equal(content.pickUnseenPassage('en', { tier: 1 }), null, 'seen registered passage is not relabeled unseen');
 
 // Measurement stays denominator-independent and separates languages and timing errors.
 const rows = [

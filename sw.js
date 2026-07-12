@@ -1,7 +1,7 @@
 ﻿// ===== service worker: bounded same-origin offline cache =====
 const CACHE_PREFIX = 'readfast-';
-const PRECACHE = 'readfast-precache-v27';
-const RUNTIME = 'readfast-runtime-v27';
+const PRECACHE = 'readfast-precache-v28';
+const RUNTIME = 'readfast-runtime-v28';
 const RUNTIME_LIMIT = 48;
 
 // This array is parsed by _build/test-assets.mjs. Keep it as valid JSON.
@@ -24,6 +24,7 @@ const PRECACHE_ASSETS = [
   "./js/drills/shared.js",
   "./js/drills/messages.js",
   "./js/drills/chunk.js",
+  "./js/drills/zhchunk.js",
   "./js/drills/sentence.js",
   "./js/drills/context.js",
   "./js/drills/conquer.js",

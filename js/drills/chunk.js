@@ -60,35 +60,29 @@ export default {
     const name = t(this.nameKey);
     const why = trainingRationale(this.id, t(this.whyKey));
     const context = attemptContext(options);
-    const difficulty = currentDifficulty(lang);
-    let tier = preferredTier(lang);
-    const passed = scaffold => store.getState().sessions.some(session => session.lang === lang && session.drill === 'chunk' && session.scaffold === scaffold && session.pass);
-    let scaffold = SCAFFOLDS.find(value => !passed(value)) || 3;
+    const registeredPassages = () => content.passagesFor(lang);
 
-    const setup = () => mount(root, drillHeader(name, exit, why),
-      h('div', { class: 'card fade-in' },
-        h('h2', { class: 'h2' }, t('drill.chunk.title')),
-        h('p', { class: 'muted' }, t('drill.chunk.instructions')),
-        h('div', { class: 'row', style: { gap: '8px', flexWrap: 'wrap' } },
-          h('span', { class: 'small muted' }, t('drill.chunk.scaffold')),
-          ...SCAFFOLDS.map(value => h('button', {
-            class: 'seg__btn' + (value === scaffold ? ' is-active' : ''),
-            style: { border: '1px solid var(--line)' },
-            'aria-pressed': value === scaffold ? 'true' : 'false',
-            onClick: () => { scaffold = value; setup(); },
-          }, t('drill.chunk.stage_n', { n: value })))),
-        h('p', { class: 'small muted', style: { marginTop: '8px' } }, t(`drill.chunk.stage_${scaffold}_description`)),
-        tierPicker(lang, tier, next => { tier = next; setup(); }),
-        h('div', { class: 'btnrow', style: { marginTop: '14px' } },
-          h('button', { class: 'btn btn--primary btn--lg', onClick: run }, t('drill.chunk.start')))));
+    const setup = () => {
+      const passages = registeredPassages();
+      mount(root, drillHeader(name, exit, why),
+        h('section', { class: 'card', style: { marginBottom: '12px' } },
+          h('h2', { class: 'h2', style: { marginBottom: '10px' } }, t('drill.chunk.passage_tab')),
+          h('div', { class: 'stack', style: { gap: '8px' } },
+            ...passages.map((passage, index) => h('button', {
+              class: 'passage-launch',
+              onClick: () => run(passage),
+            }, `${index + 1}. ${passage.title || t('drill.shared.passage')}`)),
+            !passages.length ? h('p', { class: 'note', style: { width: '100%', margin: 0 } }, t('drill.chunk.no_registered')) : null)),
+        );
+    };
 
-    const run = () => {
-      const p = pickPracticePassage(lang, { tier });
+    const run = p => {
       if (!p) return setup();
       const novelAtStart = markPassageStarted(p);
       const units = p.unit_count || countUnits(p.text, lang);
       const chunks = phraseChunks(p.text);
-      const cssClass = scaffold === 1 ? 'phrase phrase--strong' : scaffold === 2 ? 'phrase phrase--soft' : '';
+      const scaffold = 1;
+      const cssClass = 'phrase phrase--strong';
       const spans = chunks.map((chunk, index) => h('span', { class: cssClass + (cssClass && index % 2 ? ' phrase--alt' : '') }, `${chunk} `));
       const timerEl = drillTimerElement();
       const timer = createDrillTimer(ms => { timerEl.textContent = fmtClock(ms); });
@@ -111,7 +105,7 @@ export default {
         const correct = answer.correct ? 1 : 0;
         const saved = recordAttempt({
           drill: 'chunk', submode: 'phrase_support', benchmark: false,
-          lang, tier: p.tier || tier, difficulty,
+          lang, tier: p.tier || null, difficulty: p.tier || 1,
           passageId: p.id, sourcePassageId: p.id, transferPassageId: null,
           novelAtStart, assisted: scaffold < 3, completed: true,
           units, elapsedMs: Math.max(1, Math.round(elapsedMs)), rate: Math.max(1, Math.round(rate)), timingValid: timing.timingValid,
@@ -121,14 +115,14 @@ export default {
           ...context,
         });
         mount(root, drillHeader(name, exit, null), resultCard([
-          [answer.correct ? t('drill.shared.pass') : t('drill.shared.not_passed'), t('drill.chunk.stage_n', { n: scaffold })],
+          [answer.correct ? t('drill.shared.pass') : t('drill.shared.not_passed'), t('drill.shared.comprehension')],
           [Math.round(rate) + '', t('drill.shared.wpm'), t('drill.shared.reference_only')],
         ], () => this.render(root, lang, exit, options), exit, h('div', { class: 'stack' },
           !timing.timingValid ? h('div', { class: 'note note--warn' }, t('drill.shared.timing_invalid', { seconds: Math.ceil(timing.minimumMs / 1000) })) : null,
-          h('div', { class: answer.correct ? 'note note--good' : 'note note--warn' }, t(answer.correct ? 'drill.chunk.good_feedback' : 'drill.chunk.retry_feedback', { next: Math.min(3, scaffold + 1) })),
+          h('div', { class: answer.correct ? 'note note--good' : 'note note--warn' }, t(answer.correct ? 'drill.chunk.good_feedback' : 'drill.chunk.retry_feedback')),
           attemptErrorNote(saved))));
       };
-      mount(root, drillHeader(t('drill.chunk.stage_n', { n: scaffold }), () => { timer.stop(); exit(); }, why),
+      mount(root, drillHeader(name, () => { timer.stop(); exit(); }, why),
         h('div', { class: 'hud' }, h('span', { class: 'chip' }, t('drill.chunk.meta', { units, chunks: chunks.length })), timerEl),
         h('div', { class: 'card' }, h('div', { class: 'eyebrow' }, p.title || t('drill.shared.passage')), reader),
         h('div', { class: 'btnrow', style: { marginTop: '12px' } },

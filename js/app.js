@@ -68,8 +68,8 @@ registerMessages('ko', {
   'app.home.recommend_apply': '제안 적용',
   'app.library.en.title': '영어 지문',
   'app.library.zh.title': '중국어 지문',
-  'app.library.en.lead': '훈련에 쓰는 영어 지문을 난이도별로 모았습니다. 모든 지문의 원문과 한국어 전문을 한 화면에서 함께 볼 수 있습니다.',
-  'app.library.zh.lead': '훈련에 쓰는 중국어 지문과 단어 분할 문장을 난이도별로 모았습니다. 모든 문장의 원문과 한국어 전문을 한 화면에서 함께 볼 수 있습니다.',
+  'app.library.en.lead': '등록한 영어 지문의 원문과 자연스러운 한국어 전문을 한 화면에서 함께 봅니다.',
+  'app.library.zh.lead': '등록한 중국어 지문의 원문과 자연스러운 한국어 전문을 한 화면에서 함께 봅니다.',
   'app.library.count': '총 {count}개',
   'app.library.difficulty': '난이도 {tier}',
   'app.library.translation': '한국어 전문 보기',
@@ -79,6 +79,7 @@ registerMessages('ko', {
   'app.library.translation_note': '이 번역은 단어 때문에 멈추지 않도록 돕는 기계 번역입니다.',
   'app.library.source': '원문',
   'app.library.korean': '한국어 전문',
+  'app.library.fixed_expressions': '固定搭配',
   'app.library.translation_missing': '한국어 전문을 준비하지 못했습니다.',
   'app.library.progress_help': '원문이나 한국어 전문에서 원하는 위치를 클릭하면 읽기 마커가 생깁니다. Ctrl+S로 저장하고 Ctrl+E로 마커 위치로 돌아갑니다.',
   'app.library.marker_go': '마커 위치로 이동',
@@ -270,8 +271,8 @@ registerMessages('en', {
   'app.home.recommend_apply': 'Apply suggestion',
   'app.library.en.title': 'English texts',
   'app.library.zh.title': 'Chinese texts',
-  'app.library.en.lead': 'All English passages used in training, grouped by difficulty. The original and the full Korean translation appear together on this page.',
-  'app.library.zh.lead': 'All Chinese passages and word-segmentation sentences used in training, grouped by difficulty. The original and the full Korean translation appear together on this page.',
+  'app.library.en.lead': 'View each registered English text beside its natural Korean full translation.',
+  'app.library.zh.lead': 'View each registered Chinese text beside its natural Korean full translation.',
   'app.library.count': '{count} total',
   'app.library.difficulty': 'Difficulty {tier}',
   'app.library.translation': 'View Korean translation',
@@ -281,6 +282,7 @@ registerMessages('en', {
   'app.library.translation_note': 'This machine translation is a support tool for vocabulary bottlenecks.',
   'app.library.source': 'Original text',
   'app.library.korean': 'Korean full translation',
+  'app.library.fixed_expressions': 'Fixed expressions',
   'app.library.translation_missing': 'A Korean full translation is unavailable.',
   'app.library.progress_help': 'Click a position in either column to place a reading marker. Press Ctrl+S to save it and Ctrl+E to return to it.',
   'app.library.marker_go': 'Go to marker',
@@ -429,8 +431,8 @@ registerMessages('en', {
 
 const m = (key, params) => t('app.' + key, params || {});
 const view = $('#view');
-const ROUTES = ['train', 'mytexts', 'library', 'theory', 'settings'];
-const TAB_ICON = { train: 'train', mytexts: 'mytexts', library: 'mytexts', theory: 'theory' };
+const ROUTES = ['train', 'library'];
+const TAB_ICON = { train: 'train', library: 'mytexts' };
 let lang = store.getSetting('lang') || 'en';
 let route = 'train';
 let drillActive = false;
@@ -528,19 +530,12 @@ function syncTabs() {
 
 function confirmLeave() {
   if (!drillActive) return true;
-  const approved = confirm(m('leave'));
-  if (approved) {
-    runTeardown();
-    setDrillActive(false);
-  }
-  return approved;
+  runTeardown();
+  setDrillActive(false);
+  return true;
 }
 
-window.addEventListener('beforeunload', event => {
-  if (!drillActive) return;
-  event.preventDefault();
-  event.returnValue = '';
-});
+window.addEventListener('beforeunload', () => runTeardown());
 
 function go(next) {
   if (!ROUTES.includes(next)) return;
@@ -559,10 +554,8 @@ function render() {
   clear(view);
   window.scrollTo(0, 0);
   if (route === 'train') renderTrain();
-  else if (route === 'mytexts') renderMyTexts();
   else if (route === 'library') renderLibrary();
-  else if (route === 'theory') renderTheory(view);
-  else renderSettings();
+  else renderTrain();
   translateDocument(view);
   view.focus({ preventScroll: true });
 }
@@ -631,7 +624,7 @@ function drillGoal(drill) {
 
 function launch(drill, options = {}) {
   if (!drill || !drill.langs?.includes(lang) || !confirmLeave()) return;
-  const from = route === 'train' ? route : 'train';
+  const from = ROUTES.includes(options.exitTo) ? options.exitTo : (route === 'train' ? route : 'train');
   const exit = () => {
     runTeardown();
     setDrillActive(false);
@@ -786,12 +779,7 @@ function drillTile(drill) {
 }
 
 function renderTrain() {
-  mount(view, h('div', { class: 'fade-in' },
-    h('h1', { class: 'h1' }, m('train.title')),
-    h('p', { class: 'lead' }, m('train.only_chunk_lead')),
-    lang === 'en'
-      ? h('section', { class: 'drill-library', open: true }, drillTile(DRILL_BY_ID.chunk))
-      : h('section', { class: 'card' }, h('p', { class: 'note' }, m('train.only_chunk_english')))));
+  launch(lang === 'zh' ? DRILL_BY_ID.zhchunk : DRILL_BY_ID.chunk, { exitTo: 'library' });
 }
 
 const LIBRARY_MARKERS_KEY = 'libraryReadingMarkers';
@@ -906,7 +894,13 @@ function libraryPassageCard(passage, libraryLang) {
         h('span', { class: 'small muted', style: { marginLeft: '8px' } }, `${passage.unit_count || countUnits(passage.text, libraryLang)} ${unit}`))),
     h('div', { class: 'library-passage__pair' },
       libraryTextPanel({ passageId: passage.id, side: 'source', text: passage.text, language: libraryLang === 'zh' ? 'zh-Hans' : 'en', heading: m('library.source'), libraryLang }),
-      libraryTextPanel({ passageId: passage.id, side: 'ko', text: translated, language: 'ko', heading: m('library.korean'), libraryLang })));
+      libraryTextPanel({ passageId: passage.id, side: 'ko', text: translated, language: 'ko', heading: m('library.korean'), libraryLang })),
+    libraryLang === 'zh' && Array.isArray(passage.fixed_expressions) && passage.fixed_expressions.length
+      ? h('section', { class: 'note small', style: { marginTop: '12px' } },
+        h('strong', null, m('library.fixed_expressions')),
+        h('div', { class: 'row', style: { gap: '8px', flexWrap: 'wrap', marginTop: '8px' } },
+          ...passage.fixed_expressions.map(item => h('span', { class: 'chip' }, `${item.term} · ${item.meaning_ko}`))))
+      : null);
 }
 
 function renderLibrary() {
@@ -927,13 +921,13 @@ function renderLibrary() {
   mount(view, h('div', { class: 'fade-in' },
     h('h1', { class: 'h1' }, m(`library.${libraryLang}.title`)),
     h('p', { class: 'lead' }, m(`library.${libraryLang}.lead`)),
-    h('div', { class: 'row spread' },
+    passages.length ? h('div', { class: 'row spread' },
       h('p', { class: 'small muted' }, m('library.count', { count: passages.length })),
       h('div', { class: 'btnrow' },
         h('button', { class: 'btn btn--ghost', type: 'button', disabled: !marker, onClick: goToLibraryMarker }, `${m('library.marker_go')} (Ctrl+E)`),
         h('button', { class: 'btn btn--ghost', type: 'button', disabled: !libraryMarkerDrafts[libraryLang], onClick: saveLibraryMarker }, `${m('library.marker_save')} (Ctrl+S)`),
-        h('button', { class: 'btn btn--ghost', type: 'button', disabled: !marker, onClick: resetLibraryMarker }, m('library.marker_reset')))),
-    h('p', { class: 'note small' }, marker ? (libraryMarkerDrafts[libraryLang] ? m('library.marker_unsaved') : m('library.marker_saved')) : m('library.progress_help')),
+        h('button', { class: 'btn btn--ghost', type: 'button', disabled: !marker, onClick: resetLibraryMarker }, m('library.marker_reset')))) : null,
+    passages.length ? h('p', { class: 'note small' }, marker ? (libraryMarkerDrafts[libraryLang] ? m('library.marker_unsaved') : m('library.marker_saved')) : m('library.progress_help')) : h('p', { class: 'note small' }, getUILang() === 'en' ? 'No passages are registered. Give an agent a text or a link to register it here with a Korean translation.' : '등록된 지문이 없습니다. 원문이나 링크를 에이전트에게 주면 자연스러운 한국어 번역과 함께 이 탭에 등록합니다.'),
     ...groups,
     segmentation.length ? h('section', { style: { marginTop: '28px' } },
       h('h2', { class: 'h2' }, m('library.sentences_title')),
@@ -1202,7 +1196,6 @@ function rangeSetting(key, label, min, max, step, value, formatter) {
 
 function renderSettings() {
   const theme = store.getSetting('theme') || 'auto';
-  const difficulty = currentDifficulty();
   const fileInput = h('input', { type: 'file', accept: '.json,application/json', style: { display: 'none' } });
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
@@ -1244,14 +1237,6 @@ function renderSettings() {
           h('div', { class: 'choice-group setting-row__control' },
             choiceButton('English', lang === 'en', () => changeTrainingLanguage('en')),
             choiceButton('中文', lang === 'zh', () => changeTrainingLanguage('zh'))))),
-      h('section', { class: 'card setting-card' },
-        h('h2', { class: 'h2' }, m('settings.difficulty')),
-        h('p', { class: 'small muted' }, m('settings.difficulty_help')),
-        h('div', { class: 'choice-group', style: { marginTop: '10px' } },
-          ...DIFFICULTY_ORDER.map(number => choiceButton(
-            number + ' · ' + DIFFICULTIES[number].description[getUILang()],
-            difficulty === number,
-            () => chooseDifficulty(number))))),
       h('section', { class: 'card setting-card' },
         h('h2', { class: 'h2' }, m('settings.display')),
         rangeSetting('readerFontSize', m('settings.font_size'), 16, 30, 1, Number(store.getSetting('readerFontSize')) || 20, value => value + 'px'),
@@ -1329,8 +1314,7 @@ function renderSettings() {
       h('p', null, m('settings.about_body')),
       h('div', { class: 'linkrow' },
         h('a', { href: 'https://seunghoonchoi.com', target: '_blank', rel: 'noopener' }, 'seunghoonchoi.com'),
-        h('a', { href: 'https://github.com/seunghoonchoi-phd/reading-trainer', target: '_blank', rel: 'noopener' }, m('settings.source')),
-        h('a', { href: '#theory', onClick: event => { event.preventDefault(); go('theory'); } }, m('settings.principles'))))));
+        h('a', { href: 'https://github.com/seunghoonchoi-phd/reading-trainer', target: '_blank', rel: 'noopener' }, m('settings.source'))))));
 }
 
 function changeTrainingLanguage(next) {
@@ -1345,18 +1329,6 @@ function changeTrainingLanguage(next) {
 }
 
 $('.appbar__brand')?.addEventListener('click', () => go('train'));
-$('#settingsBtn')?.addEventListener('click', () => go('settings'));
-$('#uiLangToggle')?.addEventListener('click', event => {
-  if (drillActive && !confirmLeave()) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  }
-}, true);
-$('#themeToggle')?.addEventListener('click', () => {
-  const next = resolveTheme() === 'dark' ? 'light' : 'dark';
-  if (store.setSetting('theme', next)) applyTheme();
-  else alert(m('common.storage_error'));
-});
 $$('.tab').forEach(tab => tab.addEventListener('click', () => go(tab.dataset.route)));
 $$('.seg__btn[data-lang]').forEach(button => button.addEventListener('click', () => changeTrainingLanguage(button.dataset.lang)));
 

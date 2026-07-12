@@ -118,7 +118,7 @@ body.recovery-mode .appbar__controls,
 body.recovery-mode .tabbar { display: none !important; }
 body.recovery-mode { padding-bottom: 0; }
 body.drill-mode { padding-bottom: 0; }
-body.drill-mode .tabbar { display: none; }
+body.drill-mode .tabbar { display: flex; }
 .recovery-panel { max-width: 760px; margin: 32px auto 0; }
 @media (max-width: 760px) {
   .appbar { gap: 6px; padding-left: 10px; padding-right: 10px; flex-wrap: wrap; }
@@ -166,6 +166,8 @@ body.drill-mode .tabbar { display: none; }
 .tab__ico { font-size: 1.12rem; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 .tab__ico svg { width: 23px; height: 23px; display: block; }
 .tab__lbl { max-width: 100%; font-size: .68rem; font-weight: 700; line-height: 1.15; text-align: center; white-space: normal; overflow-wrap: break-word; }
+.passage-launch { width: 100%; min-height: var(--tap-size); padding: 13px 16px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font: inherit; font-weight: 800; text-align: left; cursor: pointer; }
+.passage-launch:hover { border-color: var(--accent); background: var(--accent-soft); }
 .tab.is-active, .tab[aria-current="page"] { color: var(--accent); }
 @media (min-width: 900px) {
   /* nav lives INSIDE the header bar, centered between brand and controls */

@@ -84,12 +84,12 @@ export async function loadContent() {
     tryFetch('data/korean_translations.json'),
   ]);
   DATA = {
-    passages: (passages && passages.length) ? passages : SEED.passages,
-    vocabEn: vocabEn || SEED.vocabEn,
-    vocabZh: vocabZh || SEED.vocabZh,
-    segZh: segZh || SEED.segZh,
+    passages: Array.isArray(passages) ? passages : [],
+    vocabEn: vocabEn || { words: [], pseudowords: [] },
+    vocabZh: vocabZh || { items: [], pseudochars: [] },
+    segZh: segZh || { sentences: [] },
     koreanTranslations: koreanTranslations || {},
-    isSeed: !(passages && passages.length),
+    isSeed: false,
   };
   return DATA;
 }
