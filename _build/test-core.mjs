@@ -21,7 +21,10 @@ const fixtures = {
   'data/vocab_zh.json': JSON.parse(await readFile(new URL('../data/vocab_zh.json', import.meta.url), 'utf8')),
   'data/seg_zh.json': JSON.parse(await readFile(new URL('../data/seg_zh.json', import.meta.url), 'utf8')),
 };
-globalThis.fetch = async path => ({ ok: !!fixtures[path], json: async () => structuredClone(fixtures[path]) });
+globalThis.fetch = async path => {
+  const key = String(path).replace(/[?#].*$/, '');
+  return { ok: !!fixtures[key], json: async () => structuredClone(fixtures[key]) };
+};
 
 const store = await import('../js/store.js');
 const metrics = await import('../js/metrics.js');

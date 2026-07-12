@@ -68,9 +68,12 @@ const SEED = {
 let DATA = null;
 const koreanTranslationCache = new Map();
 const TRANSLATION_CHUNK_LIMIT = 3600;
+// Bump when registered passage data changes. It bypasses a CDN copy that can outlive a new deploy.
+const CONTENT_REVISION = '20260713-32';
 
 async function tryFetch(path) {
-  try { const r = await fetch(path, { cache: 'no-cache' }); if (r.ok) return await r.json(); } catch {}
+  const url = `${path}${path.includes('?') ? '&' : '?'}v=${CONTENT_REVISION}`;
+  try { const r = await fetch(url, { cache: 'no-store' }); if (r.ok) return await r.json(); } catch {}
   return null;
 }
 
