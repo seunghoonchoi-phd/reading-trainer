@@ -11,7 +11,7 @@ const DEFINITIONS = Object.freeze({
 });
 
 export const ALL_DRILL_IDS = Object.freeze([
-  'vocab', 'zhchar', 'zhseg', 'chunk', 'sentence', 'err', 'repeated',
+  'zhchar', 'zhseg', 'chunk', 'sentence', 'err', 'repeated',
   'conquer', 'context', 'modes', 'preview', 'retrieval', 'triage',
 ]);
 

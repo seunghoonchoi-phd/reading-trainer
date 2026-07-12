@@ -1,5 +1,4 @@
 // ===== drills/index.js — unlocked catalog grouped by training role =====
-import vocab from './vocab.js';
 import chunk from './chunk.js';
 import sentence from './sentence.js';
 import conquer from './conquer.js';
@@ -18,7 +17,7 @@ registerDrillMessages();
 export { DRILL_MESSAGES };
 
 export const DRILLS = [
-  err, repeated, modes, vocab,
+  err, repeated, modes,
   chunk, zhchar, zhseg,
   conquer, sentence, context, retrieval, preview,
   triage,

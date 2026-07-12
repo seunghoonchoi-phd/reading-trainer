@@ -44,13 +44,16 @@ for (const asset of assets) {
   if (!exists(relative)) fail(`Missing precache asset: ${relative}`);
 }
 
+const archivedAssets = new Set([
+  'js/drills/vocab.js',
+]);
 const requiredAssets = [
   'index.html',
   'css/styles.css',
   'manifest.webmanifest',
   'icon.svg',
   'og.png',
-  ...walk('js', file => file.endsWith('.js')),
+  ...walk('js', file => file.endsWith('.js') && !archivedAssets.has(posix(file))),
   ...walk('data', file => file.endsWith('.json')),
   ...walk('icons', file => /\.(?:png|svg)$/i.test(file)),
 ];
@@ -85,7 +88,7 @@ for (const match of index.matchAll(/\b(?:src|href)=["']([^"'#]+)["']/gi)) {
   if (relative && !exists(relative)) fail(`index.html references a missing local asset: ${relative}`);
 }
 
-for (const file of walk('js', item => item.endsWith('.js'))) {
+for (const file of walk('js', item => item.endsWith('.js') && !archivedAssets.has(posix(item)))) {
   const source = read(file);
   const specs = [
     ...source.matchAll(/\b(?:import|export)\s+(?:[^'";]*?\s+from\s+)?["']([^"']+)["']/g),

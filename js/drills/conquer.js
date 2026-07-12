@@ -126,7 +126,6 @@ export default {
         wrap.append(el);
       });
       const proceed = () => {
-        unknown.forEach(key => store.srReview(`conquer-vocab-${language}`, key, 0));
         const host = h('div');
         const item = isPreset ? content.autoCloze(p.text, language, 1)[0] : p.gist;
         if (!item) return phase2(p, isPreset, language, novelAtStart, null);

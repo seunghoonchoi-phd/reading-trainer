@@ -259,7 +259,7 @@ body.drill-mode .tabbar { display: none; }
 .level-pill:hover { color: var(--accent-ink); border-color: var(--accent); }
 .level-pill .icon { color: var(--gold); }
 
-/* 오늘 복습할 어휘 카드 배지 */
+/* 오늘 복습할 카드 배지 */
 .due-badge { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; margin-top: 12px; padding: 11px 14px; border: 1px solid var(--gold-line); background: var(--gold-bg); border-radius: var(--radius); color: var(--ink); font-family: inherit; font-size: .9rem; cursor: pointer; transition: border-color .12s ease, transform .04s ease; }
 .due-badge:hover { border-color: var(--gold); }
 .due-badge:active { transform: translateY(1px); }

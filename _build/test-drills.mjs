@@ -23,7 +23,7 @@ const { mergeSingletonChunks, phraseChunks } = await import('../js/drills/chunk.
 const { buildSentenceTrials } = await import('../js/drills/sentence.js');
 const { hasMeaningfulText } = await import('../js/drills/triage.js');
 const { validRetrievalText } = await import('../js/drills/retrieval.js');
-const { requeueFailedCard } = await import('../js/drills/vocab.js');
+const { DRILLS } = await import('../js/drills/index.js');
 const { buildZhCharPool } = await import('../js/drills/zhchar.js');
 const { boundaryF1, goldBoundaryCuts } = await import('../js/drills/zhseg.js');
 const { tokenizeStudyUnits } = await import('../js/drills/conquer.js');
@@ -78,14 +78,8 @@ check('논문 도구와 자기설명은 빈 입력을 완료로 인정하지 않
   assert.equal(validRetrievalText('A concrete recalled idea.', 10), true);
 });
 
-check('실패한 어휘 카드는 같은 세션 뒤쪽에 재출제되고 무한 반복하지 않는다', () => {
-  const a = { key: 'alpha' };
-  const queue = [a, { key: 'beta' }, { key: 'gamma' }];
-  const retries = new Map();
-  assert.equal(requeueFailedCard(queue, 0, a, retries, 2), true);
-  assert.equal(queue.at(-1), a);
-  assert.equal(requeueFailedCard(queue, 3, a, retries, 2), true);
-  assert.equal(requeueFailedCard(queue, queue.length - 1, a, retries, 2), false);
+check('훈련 목록에는 어휘 카드와 어휘 판단을 넣지 않는다', () => {
+  assert.equal(DRILLS.some(drill => drill.id === 'vocab'), false);
 });
 
 check('느리거나 틀린 중국어 글자가 세션 맨 앞에 온다', () => {

@@ -112,7 +112,6 @@ export function renderTheory(root) {
 
   const supports = section('supports', 'theory.supports.title',
     h('div', { class: 'explain-grid explain-grid--two' },
-      explanation('theory.supports.vocab.title', 'theory.supports.vocab.body'),
       explanation('theory.supports.repeat.title', 'theory.supports.repeat.body'),
       explanation('theory.supports.language.title', 'theory.supports.language.body'),
       explanation('theory.supports.tools.title', 'theory.supports.tools.body')));

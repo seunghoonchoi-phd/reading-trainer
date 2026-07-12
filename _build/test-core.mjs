@@ -305,7 +305,9 @@ equal(program.cycleStatus('en', due + 3000).phase, 'baseline', 'completed cycle 
 store.addAttempt(attempt({ attemptId: 'zh-b1', lang: 'zh', completedAt: new Date(due + 4000).toISOString(), startedAt: new Date(due + 3000).toISOString() }));
 equal(program.cycleStatus('zh', due + 5000).stages[0].done, 1, 'ZH benchmark counted separately');
 equal(program.cycleStatus('en', due + 5000).stages[0].done, 0, 'EN cycle unaffected by ZH');
-equal(program.buildDailyPlan('en', due + 5000).reduce((sum, item) => sum + item.minutes, 0), 10, 'daily plan totals 10 minutes');
+const dailyPlan = program.buildDailyPlan('en', due + 5000);
+equal(dailyPlan.reduce((sum, item) => sum + item.minutes, 0), 10, 'daily plan totals 10 minutes');
+equal(dailyPlan.find(item => item.slot === 'prepare').drillId, 'preview', 'daily plan uses paragraph preview instead of vocabulary review');
 equal(program.difficultyRecommendation('zh').ready, false, 'language-specific difficulty evidence');
 
 storage.setItem('readfast.v2', '{broken-json');

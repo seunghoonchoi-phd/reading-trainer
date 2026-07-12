@@ -146,7 +146,7 @@ export function buildDailyPlan(lang, at = Date.now()) {
     : status.phase === 'transfer'
       ? Object.freeze({ drillId: 'repeated', targetSubmode: null, weaknessType: null })
       : Object.freeze({ drillId: 'err', targetSubmode: null, weaknessType: null });
-  const prepare = status.phase === 'transfer' ? 'retrieval' : 'vocab';
+  const prepare = status.phase === 'transfer' ? 'retrieval' : 'preview';
   const transfer = 'retrieval';
   const focusStage = waiting ? null : status.phase;
   return Object.freeze([
