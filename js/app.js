@@ -66,6 +66,19 @@ registerMessages('ko', {
   'app.home.recommend_title': '시작 난이도 제안',
   'app.home.recommend_body': '처음 보는 글 3회의 결과로 앱 난이도 {difficulty}를 임시 제안합니다. 자동으로 바꾸지 않습니다.',
   'app.home.recommend_apply': '제안 적용',
+  'app.library.en.title': '영어 지문',
+  'app.library.zh.title': '중국어 지문',
+  'app.library.en.lead': '훈련에 쓰는 영어 지문을 난이도별로 모았습니다. 제목을 누르면 전문을 볼 수 있습니다.',
+  'app.library.zh.lead': '훈련에 쓰는 중국어 지문과 단어 분할 문장을 난이도별로 모았습니다. 제목을 누르면 전문을 볼 수 있습니다.',
+  'app.library.count': '총 {count}개',
+  'app.library.difficulty': '난이도 {tier}',
+  'app.library.translation': '한국어 전문 보기',
+  'app.library.translation_title': '한국어 전문',
+  'app.library.translation_loading': '한국어 전문을 불러오는 중입니다…',
+  'app.library.translation_failed': '번역을 불러오지 못했습니다. 인터넷 연결을 확인한 뒤 다시 눌러 주세요.',
+  'app.library.translation_note': '이 번역은 단어 때문에 멈추지 않도록 돕는 기계 번역입니다.',
+  'app.library.sentences_title': '중국어 단어 분할 문장',
+  'app.library.sentences_lead': '중국어 단어 분할 훈련에서 쓰는 모든 문장입니다.',
   'app.plan.prepare': '준비',
   'app.plan.focus': '본훈련',
   'app.plan.transfer': '전이·인출',
@@ -242,6 +255,19 @@ registerMessages('en', {
   'app.home.recommend_title': 'Starting-difficulty suggestion',
   'app.home.recommend_body': 'Three unseen-text attempts suggest app difficulty {difficulty}. The app will not change it automatically.',
   'app.home.recommend_apply': 'Apply suggestion',
+  'app.library.en.title': 'English texts',
+  'app.library.zh.title': 'Chinese texts',
+  'app.library.en.lead': 'All English passages used in training, grouped by difficulty. Open a title to read the full passage.',
+  'app.library.zh.lead': 'All Chinese passages and word-segmentation sentences used in training, grouped by difficulty. Open a title to read the full text.',
+  'app.library.count': '{count} total',
+  'app.library.difficulty': 'Difficulty {tier}',
+  'app.library.translation': 'View Korean translation',
+  'app.library.translation_title': 'Korean full translation',
+  'app.library.translation_loading': 'Loading Korean translation…',
+  'app.library.translation_failed': 'The translation could not be loaded. Please check the internet connection and try again.',
+  'app.library.translation_note': 'This machine translation is a support tool for vocabulary bottlenecks.',
+  'app.library.sentences_title': 'Chinese word-segmentation sentences',
+  'app.library.sentences_lead': 'Every sentence used in Chinese word-segmentation practice.',
   'app.plan.prepare': 'Prepare',
   'app.plan.focus': 'Focus',
   'app.plan.transfer': 'Transfer or retrieve',
@@ -377,8 +403,8 @@ registerMessages('en', {
 
 const m = (key, params) => t('app.' + key, params || {});
 const view = $('#view');
-const ROUTES = ['train', 'mytexts', 'progress', 'theory', 'settings'];
-const TAB_ICON = { train: 'train', mytexts: 'mytexts', progress: 'progress', theory: 'theory' };
+const ROUTES = ['train', 'mytexts', 'english-library', 'chinese-library', 'theory', 'settings'];
+const TAB_ICON = { train: 'train', mytexts: 'mytexts', 'english-library': 'mytexts', 'chinese-library': 'mytexts', theory: 'theory' };
 let lang = store.getSetting('lang') || 'en';
 let route = 'train';
 let drillActive = false;
@@ -508,7 +534,8 @@ function render() {
   window.scrollTo(0, 0);
   if (route === 'train') renderTrain();
   else if (route === 'mytexts') renderMyTexts();
-  else if (route === 'progress') renderProgress();
+  else if (route === 'english-library') renderLanguageLibrary('en');
+  else if (route === 'chinese-library') renderLanguageLibrary('zh');
   else if (route === 'theory') renderTheory(view);
   else renderSettings();
   translateDocument(view);
@@ -755,6 +782,73 @@ function renderTrain() {
       h('div', { class: 'drill-library__body' },
         h('p', { class: 'small muted' }, m('train.library_help')),
         ...groups))));
+}
+
+function libraryTranslationPanel(passage) {
+  const panel = h('div', { class: 'note small', style: { display: 'none', marginTop: '12px' } });
+  const button = h('button', {
+    class: 'btn btn--ghost', type: 'button', 'aria-expanded': 'false',
+    onClick: async () => {
+      const open = panel.style.display !== 'none';
+      if (open) {
+        panel.style.display = 'none';
+        button.setAttribute('aria-expanded', 'false');
+        return;
+      }
+      panel.style.display = '';
+      button.setAttribute('aria-expanded', 'true');
+      button.disabled = true;
+      mount(panel, h('span', { class: 'muted' }, m('library.translation_loading')));
+      try {
+        const translated = await content.koreanTranslationFor(passage);
+        mount(panel,
+          h('div', { style: { fontWeight: '800', marginBottom: '6px' } }, m('library.translation_title')),
+          h('div', { style: { whiteSpace: 'pre-wrap', lineHeight: '1.7' } }, translated),
+          h('p', { class: 'small muted', style: { margin: '10px 0 0' } }, m('library.translation_note')));
+      } catch {
+        mount(panel, h('span', { class: 'muted' }, m('library.translation_failed')));
+      } finally {
+        button.disabled = false;
+      }
+    },
+  }, m('library.translation'));
+  return h('div', { style: { marginTop: '12px' } }, button, panel);
+}
+
+function libraryPassageCard(passage, libraryLang) {
+  const unit = libraryLang === 'zh' ? '자' : 'words';
+  return h('details', { class: 'card' },
+    h('summary', { style: { cursor: 'pointer' } },
+      h('div', { class: 'row spread', style: { paddingRight: '8px' } },
+        h('strong', null, passage.title || m('common.no_passage')),
+        h('span', { class: 'small muted' }, `${passage.unit_count || countUnits(passage.text, libraryLang)} ${unit}`))),
+    h('div', { class: 'reader', lang: libraryLang === 'zh' ? 'zh-Hans' : 'en', 'data-lang': libraryLang, style: { marginTop: '14px' } },
+      h('div', { class: 'reader-wrap' }, passage.text)),
+    libraryTranslationPanel(passage));
+}
+
+function renderLanguageLibrary(libraryLang) {
+  const passages = content.passagesFor(libraryLang).slice().sort((a, b) => a.tier - b.tier || String(a.id).localeCompare(String(b.id)));
+  const tiers = [...new Set(passages.map(passage => passage.tier))];
+  const groups = tiers.map(tier => {
+    const rows = passages.filter(passage => passage.tier === tier);
+    return h('section', { style: { marginTop: '24px' } },
+      h('div', { class: 'row spread' },
+        h('h2', { class: 'h2', style: { margin: 0 } }, m('library.difficulty', { tier })),
+        h('span', { class: 'small muted' }, m('library.count', { count: rows.length }))),
+      h('div', { class: 'stack', style: { marginTop: '10px' } }, ...rows.map(passage => libraryPassageCard(passage, libraryLang))));
+  });
+  const segmentation = libraryLang === 'zh' ? (content.data()?.segZh?.sentences || []).map((item, index) =>
+    libraryPassageCard({ id: `zhseg-library-${index}`, title: item.text, text: item.text, lang: 'zh', unit_count: countUnits(item.text, 'zh') }, 'zh')) : [];
+  mount(view, h('div', { class: 'fade-in' },
+    h('h1', { class: 'h1' }, m(`library.${libraryLang}.title`)),
+    h('p', { class: 'lead' }, m(`library.${libraryLang}.lead`)),
+    h('p', { class: 'small muted' }, m('library.count', { count: passages.length })),
+    ...groups,
+    segmentation.length ? h('section', { style: { marginTop: '28px' } },
+      h('h2', { class: 'h2' }, m('library.sentences_title')),
+      h('p', { class: 'small muted' }, m('library.sentences_lead')),
+      h('div', { class: 'stack', style: { marginTop: '10px' } }, ...segmentation)) : null));
 }
 
 function detectLang(text) {

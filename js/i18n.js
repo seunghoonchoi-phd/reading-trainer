@@ -1,4 +1,4 @@
-// ===== i18n.js: UI language only. Training language (English/Chinese) stays separate. =====
+﻿// ===== i18n.js: UI language only. Training language (English/Chinese) stays separate. =====
 
 const STORAGE_KEY = 'readfast.uiLanguage';
 const SUPPORTED_LANGS = new Set(['ko', 'en']);
@@ -15,7 +15,8 @@ const MESSAGES = {
     'shell.nav.today': '오늘',
     'shell.nav.train': '훈련',
     'shell.nav.myTexts': '내 글',
-    'shell.nav.progress': '기록',
+    'shell.nav.englishLibrary': '영어 지문',
+    'shell.nav.chineseLibrary': '중국어 지문',
     'shell.nav.theory': '원리',
     'shell.trainingLanguage': '훈련할 언어',
     'shell.theme': '화면 밝기 전환',
@@ -114,7 +115,8 @@ const MESSAGES = {
     'shell.nav.today': 'Today',
     'shell.nav.train': 'Train',
     'shell.nav.myTexts': 'Texts',
-    'shell.nav.progress': 'Stats',
+    'shell.nav.englishLibrary': 'English texts',
+    'shell.nav.chineseLibrary': 'Chinese texts',
     'shell.nav.theory': 'Guide',
     'shell.trainingLanguage': 'Practice language',
     'shell.theme': 'Change color theme',
