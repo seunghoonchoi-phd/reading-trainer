@@ -79,7 +79,9 @@ registerMessages('ko', {
   'app.library.translation_note': '이 번역은 단어 때문에 멈추지 않도록 돕는 기계 번역입니다.',
   'app.library.source': '원문',
   'app.library.korean': '한국어 전문',
-  'app.library.fixed_expressions': '固定搭配',
+  'app.library.fixed_expressions': '固定搭配·연결 표현',
+  'app.library.expression.collocation': '고정표현',
+  'app.library.expression.paired': '연결 표현',
   'app.library.translation_missing': '한국어 전문을 준비하지 못했습니다.',
   'app.library.progress_help': '원문이나 한국어 전문에서 원하는 위치를 클릭하면 읽기 마커가 생깁니다. Ctrl+S로 저장하고 Ctrl+E로 마커 위치로 돌아갑니다.',
   'app.library.marker_go': '마커 위치로 이동',
@@ -282,7 +284,9 @@ registerMessages('en', {
   'app.library.translation_note': 'This machine translation is a support tool for vocabulary bottlenecks.',
   'app.library.source': 'Original text',
   'app.library.korean': 'Korean full translation',
-  'app.library.fixed_expressions': 'Fixed expressions',
+  'app.library.fixed_expressions': 'Fixed expressions and paired connectors',
+  'app.library.expression.collocation': 'Fixed expression',
+  'app.library.expression.paired': 'Paired connector',
   'app.library.translation_missing': 'A Korean full translation is unavailable.',
   'app.library.progress_help': 'Click a position in either column to place a reading marker. Press Ctrl+S to save it and Ctrl+E to return to it.',
   'app.library.marker_go': 'Go to marker',
@@ -549,6 +553,7 @@ function go(next) {
 function render() {
   if (store.getLoadIssue()) return renderRecoveryScreen();
   document.body.classList.remove('recovery-mode');
+  view.classList.toggle('view--library', route === 'library');
   runTeardown();
   setDrillActive(false);
   clear(view);
@@ -887,23 +892,25 @@ function libraryTextPanel({ passageId, side, text, language, heading, libraryLan
 function libraryPassageCard(passage, libraryLang) {
   const unit = libraryLang === 'zh' ? '자' : 'words';
   const translated = content.koreanTranslationTextFor(passage) || m('library.translation_missing');
+  const hasFixedExpressions = libraryLang === 'zh' && Array.isArray(passage.fixed_expressions) && passage.fixed_expressions.length;
   return h('article', { class: 'card library-passage' },
     h('div', { class: 'row spread' },
       h('div', null,
         h('strong', null, passage.title || m('common.no_passage')),
         passage.title_ko ? h('span', { class: 'library-passage__title-ko' }, passage.title_ko) : null,
         h('span', { class: 'small muted', style: { marginLeft: '8px' } }, `${passage.unit_count || countUnits(passage.text, libraryLang)} ${unit}`))),
-    h('div', { class: 'library-passage__layout' },
+    h('div', { class: 'library-passage__layout' + (hasFixedExpressions ? ' library-passage__layout--with-fixed' : '') },
       h('div', { class: 'library-passage__pair' },
         libraryTextPanel({ passageId: passage.id, side: 'source', text: passage.text, language: libraryLang === 'zh' ? 'zh-Hans' : 'en', heading: m('library.source'), libraryLang }),
         libraryTextPanel({ passageId: passage.id, side: 'ko', text: translated, language: 'ko', heading: m('library.korean'), libraryLang })),
-      libraryLang === 'zh' && Array.isArray(passage.fixed_expressions) && passage.fixed_expressions.length
+      hasFixedExpressions
         ? h('aside', { class: 'library-fixed' },
           h('h3', { class: 'library-fixed__heading' }, m('library.fixed_expressions')),
           h('div', { class: 'stack' }, ...passage.fixed_expressions.map(item =>
             h('div', { class: 'library-fixed__item' },
+              h('span', { class: 'library-fixed__type' }, item.kind === 'paired' ? m('library.expression.paired') : m('library.expression.collocation')),
               h('strong', null, item.term),
-              h('span', null, item.meaning_ko)))))
+              h('span', { class: 'library-fixed__meaning' }, item.meaning_ko)))))
         : null));
 }
 
