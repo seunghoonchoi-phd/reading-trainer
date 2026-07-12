@@ -76,22 +76,29 @@ async function tryFetch(path) {
 
 export async function loadContent() {
   if (DATA) return DATA;
-  const [passages, vocabEn, vocabZh, segZh] = await Promise.all([
+  const [passages, vocabEn, vocabZh, segZh, koreanTranslations] = await Promise.all([
     tryFetch('data/passages.json'),
     tryFetch('data/vocab_en.json'),
     tryFetch('data/vocab_zh.json'),
     tryFetch('data/seg_zh.json'),
+    tryFetch('data/korean_translations.json'),
   ]);
   DATA = {
     passages: (passages && passages.length) ? passages : SEED.passages,
     vocabEn: vocabEn || SEED.vocabEn,
     vocabZh: vocabZh || SEED.vocabZh,
     segZh: segZh || SEED.segZh,
+    koreanTranslations: koreanTranslations || {},
     isSeed: !(passages && passages.length),
   };
   return DATA;
 }
 export const data = () => DATA;
+
+export function koreanTranslationTextFor(passage) {
+  const key = passage?.id;
+  return key ? (DATA?.koreanTranslations?.[key] || null) : null;
+}
 
 function splitForTranslation(text) {
   const paragraphs = String(text || '').split(/(\n\s*\n)/);
@@ -136,6 +143,8 @@ export async function koreanTranslationFor(passage) {
   const text = String(passage?.text || '').trim();
   if (!text) throw new Error('TRANSLATION_NO_TEXT');
   const key = passage?.id || `${passage?.lang || 'en'}:${text}`;
+  const bundled = koreanTranslationTextFor(passage);
+  if (bundled) return bundled;
   if (koreanTranslationCache.has(key)) return koreanTranslationCache.get(key);
   const task = (async () => {
     const pieces = splitForTranslation(text);

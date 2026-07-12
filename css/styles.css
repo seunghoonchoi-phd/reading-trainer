@@ -1,4 +1,4 @@
-/* ===== 리드패스트 디자인 시스템 =====
+﻿/* ===== 리드패스트 디자인 시스템 =====
    컬러 문법: 브랜드(Molecular Precision)의 크림 서페이스·구리 정밀 액센트를 차용하되,
    장시간 읽기 화면의 주 액센트는 앱 고유의 딥틸을 유지한다(다크모드 포함). */
 :root {
@@ -613,6 +613,12 @@ button.cycle-step:hover { border-color: var(--accent); }
 .spread { justify-content: space-between; }
 .stack > * + * { margin-top: 12px; }
 .center { text-align: center; }
+.library-passage { padding: 18px; }
+.library-passage__pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; margin-top: 14px; }
+.library-passage__pair > section { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); }
+.library-passage__heading { margin: 0 0 10px; font-size: .86rem; color: var(--ink-faint); }
+.library-passage__text { white-space: pre-wrap; font-size: 1rem; line-height: 1.8; word-break: normal; overflow-wrap: break-word; }
+.library-passage__text--ko { word-break: keep-all; }
 hr.sep { border: 0; border-top: 1px solid var(--line); margin: 18px 0; }
 label.field, p.field { display: block; font-weight: 700; font-size: .85rem; margin-bottom: 6px; }
 label.field > :is(textarea, input, select) { margin-top: 6px; font-weight: 400; }
@@ -641,7 +647,7 @@ input[type=checkbox], input[type=radio] { width: 22px; height: 22px; accent-colo
   .today-status .status-metrics .metric:first-child { grid-column: 1 / -1; }
   .today-status .status-metrics .metric:first-child .metric__num { font-family: var(--ui); font-size: 1rem; line-height: 1.35; letter-spacing: 0; overflow-wrap: anywhere; }
   .today-status .level-pill { width: 100%; min-height: var(--tap-size); justify-content: center; }
-  .result-grid, .explain-grid--two, .explain-grid--three, .policy-grid { grid-template-columns: 1fr; }
+  .result-grid, .explain-grid--two, .explain-grid--three, .policy-grid, .library-passage__pair { grid-template-columns: 1fr; }
   .setting-row { grid-template-columns: 1fr; gap: 8px; }
   .breakdown-row { grid-template-columns: minmax(0, 1fr) auto; }
   .breakdown-row__track { grid-column: 1 / -1; grid-row: 2; }
