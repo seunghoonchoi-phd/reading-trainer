@@ -87,6 +87,9 @@ registerMessages('ko', {
   'app.library.marker_none': '아직 읽기 마커가 없습니다.',
   'app.library.marker_unsaved': '현재 마커는 아직 저장하지 않았습니다.',
   'app.library.marker_saved': '읽기 마커를 저장했습니다.',
+  'app.train.only_chunk_title': '영어 구 단위 안내',
+  'app.train.only_chunk_lead': '이 훈련은 영어 문장을 의미가 이어지는 구 단위로 읽는 연습입니다. 표시를 보며 읽은 뒤, 표시 없이도 같은 단위로 읽습니다.',
+  'app.train.only_chunk_english': '이 훈련은 영어 문장용입니다. 상단에서 English를 선택하세요.',
   'app.library.sentences_title': '중국어 단어 분할 문장',
   'app.library.sentences_lead': '중국어 단어 분할 훈련에서 쓰는 모든 문장입니다.',
   'app.plan.prepare': '준비',
@@ -286,6 +289,9 @@ registerMessages('en', {
   'app.library.marker_none': 'No reading marker has been placed.',
   'app.library.marker_unsaved': 'The current marker has not been saved yet.',
   'app.library.marker_saved': 'Reading marker saved.',
+  'app.train.only_chunk_title': 'English phrase guidance',
+  'app.train.only_chunk_lead': 'This training practices reading English sentences in meaning-based phrase units. Read with visible boundaries first, then read with fewer or no boundaries.',
+  'app.train.only_chunk_english': 'This training uses English sentences. Select English above.',
   'app.library.sentences_title': 'Chinese word-segmentation sentences',
   'app.library.sentences_lead': 'Every sentence used in Chinese word-segmentation practice.',
   'app.plan.prepare': 'Prepare',
@@ -780,27 +786,12 @@ function drillTile(drill) {
 }
 
 function renderTrain() {
-  const cycle = program.cycleStatus(lang);
-  const categories = ['core', 'language_support', 'practice', 'tool'];
-  const groups = categories.map(category => {
-    const drills = DRILLS.filter(drill => drill.langs.includes(lang) && (drill.category || 'practice') === category);
-    if (!drills.length) return null;
-    return h('section', null,
-      h('p', { class: 'track-label' }, m('category.' + category)),
-      h('div', { class: 'tiles' }, ...drills.map(drillTile)));
-  }).filter(Boolean);
-
   mount(view, h('div', { class: 'fade-in' },
     h('h1', { class: 'h1' }, m('train.title')),
-    h('p', { class: 'lead' }, m('train.lead')),
-    h('section', { class: 'card' },
-      h('h2', { class: 'h2' }, m('train.cycle')),
-      renderCycle(cycle)),
-    h('details', { class: 'drill-library', open: true },
-      h('summary', null, m('train.library')),
-      h('div', { class: 'drill-library__body' },
-        h('p', { class: 'small muted' }, m('train.library_help')),
-        ...groups))));
+    h('p', { class: 'lead' }, m('train.only_chunk_lead')),
+    lang === 'en'
+      ? h('section', { class: 'drill-library', open: true }, drillTile(DRILL_BY_ID.chunk))
+      : h('section', { class: 'card' }, h('p', { class: 'note' }, m('train.only_chunk_english')))));
 }
 
 const LIBRARY_MARKERS_KEY = 'libraryReadingMarkers';
