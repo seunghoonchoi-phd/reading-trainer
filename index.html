@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#FCFBF9" />
+  <meta name="readfast-revision" content="20260713-33" />
   <meta name="description" content="영어와 중국어 읽기 훈련 앱. 속도와 이해를 따로 기록하고, 처음 보는 글에서도 이해가 유지되는지 확인합니다." />
   <title>리드패스트 | 읽기 속도와 이해 훈련</title>
   <meta property="og:type" content="website" />
@@ -17,7 +18,7 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="icon.svg" />
   <link rel="apple-touch-icon" href="icons/icon-180.png" />
-  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css?v=20260713-33" />
 </head>
 <body>
   <a class="skip-link" href="#view" data-i18n="shell.skip">본문으로 건너뛰기</a>
@@ -43,10 +44,10 @@
   <main id="view" tabindex="-1" class="view"></main>
 
   <script type="module">
-    import { bindI18nUI, initI18n } from './js/i18n.js';
+    import { bindI18nUI, initI18n } from './js/i18n.js?v=20260713-33';
     initI18n();
     bindI18nUI();
   </script>
-  <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/app.js?v=20260713-33"></script>
 </body>
 </html>
