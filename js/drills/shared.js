@@ -318,18 +318,22 @@ export function drillHeader(name, onExit, why) {
 
 function rationaleNode(rationale) {
   if (typeof rationale === 'string') return rationale;
+  const process = rationale.process?.length
+    ? h('div', null,
+      h('b', null, getUILang() === 'en' ? 'How to do this training' : '훈련 순서'),
+      h('ol', { style: { margin: '6px 0 0', paddingInlineStart: '20px' } },
+        ...rationale.process.map(step => h('li', { style: { marginBottom: '4px' } }, step))))
+    : null;
+  const sourceLinks = rationale.sources.flatMap((source, index) => [
+    index ? document.createTextNode(' · ') : null,
+    h('a', { href: source.href, target: '_blank', rel: 'noopener noreferrer' }, source.label),
+  ].filter(Boolean));
   return h('div', { class: 'stack', style: { gap: '10px' } },
     h('div', null, h('b', null, getUILang() === 'en' ? 'Training intent' : '훈련 의도'), h('p', { style: { margin: '4px 0 0' } }, rationale.intent)),
     h('div', null, h('b', null, getUILang() === 'en' ? 'Training mechanism' : '훈련 메커니즘'), h('p', { style: { margin: '4px 0 0' } }, rationale.mechanism)),
-    rationale.process?.length ? h('div', null,
-      h('b', null, getUILang() === 'en' ? 'How to do this training' : '훈련 순서'),
-      h('ol', { style: { margin: '6px 0 0', paddingInlineStart: '20px' } },
-        ...rationale.process.map(step => h('li', { style: { marginBottom: '4px' } }, step)))) : null,
+    process,
     h('div', { class: 'small muted' }, getUILang() === 'en' ? 'Original sources' : '근거 원문', ': ',
-      ...rationale.sources.flatMap((source, index) => [
-        index ? document.createTextNode(' · ') : null,
-        h('a', { href: source.href, target: '_blank', rel: 'noopener noreferrer' }, source.label),
-      ].filter(Boolean))));
+      ...sourceLinks));
 }
 
 function translationPanel(passage) {
@@ -479,6 +483,7 @@ const READING_MANUALS = {
   triage: {
     ko: ['1패스에서 제목과 문단 첫 문장을 보고 글의 주제와 구조를 적습니다.', '더 읽을 가치가 있으면 2패스에서 전체 내용을 읽고 핵심을 요약합니다.', '근거를 검토해야 하면 3패스에서 주장과 자료를 확인합니다.', '더 읽지 않기로 정해도 그 결정을 기록하고 다음 글로 넘어갑니다.'],
     en: ['In pass 1, use the title and paragraph openings to note the topic and structure.', 'If the text deserves more time, use pass 2 to read it fully and summarize the main point.', 'If evidence needs review, use pass 3 to check claims and support.', 'If you stop reading, record that decision and move to the next text.'],
+  },
 };
 
 export function trainingRationale(id, fallback) {
