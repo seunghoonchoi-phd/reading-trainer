@@ -95,7 +95,7 @@ for (const file of walk('js', item => item.endsWith('.js') && !archivedAssets.ha
     ...source.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g),
   ].map(match => match[1]).filter(specifier => specifier.startsWith('.'));
   for (const specifier of specs) {
-    const target = posix(path.normalize(path.join(path.dirname(file), specifier)));
+    const target = posix(path.normalize(path.join(path.dirname(file), specifier.split('?')[0])));
     if (!exists(target)) fail(`${file} imports a missing module: ${specifier}`);
   }
 }
