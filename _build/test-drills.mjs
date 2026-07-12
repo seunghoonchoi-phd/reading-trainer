@@ -16,7 +16,8 @@ Object.defineProperty(globalThis, 'localStorage', {
 if (!globalThis.navigator) Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { language: 'ko', languages: ['ko'] } });
 
 const store = await import('../js/store.js');
-const content = await import('../js/content.js');
+const revision = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../js/content.js'), 'utf8').match(/const CONTENT_REVISION = '([^']+)'/)[1];
+const content = await import(`../js/content.js?v=${revision}`);
 const shared = await import('../js/drills/shared.js');
 const { isExactLocateAnswer } = await import('../js/drills/modes.js');
 const { mergeSingletonChunks, phraseChunks } = await import('../js/drills/chunk.js');

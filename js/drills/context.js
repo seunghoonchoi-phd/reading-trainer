@@ -1,6 +1,6 @@
 // ===== drills/context.js — context inference practice =====
 import { h, mount } from '../util.js';
-import * as content from '../content.js';
+import * as content from '../content.js?v=20260713-34';
 import { t } from '../i18n.js';
 import {
   drillHeader, trainingRationale, compQuiz, resultCard, tierPicker, preferredTier,

@@ -1,6 +1,6 @@
 // ===== drills/conquer.js — comprehension-first repeated practice plus unseen transfer =====
 import { h, mount, countUnits, fmtClock, sparkline } from '../util.js';
-import * as content from '../content.js';
+import * as content from '../content.js?v=20260713-34';
 import * as store from '../store.js';
 import { t } from '../i18n.js';
 import {

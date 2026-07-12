@@ -4,7 +4,7 @@ import {
   median, setPressed,
 } from './util.js';
 import * as store from './store.js';
-import * as content from './content.js?v=20260713-33';
+import * as content from './content.js?v=20260713-34';
 import * as metrics from './metrics.js';
 import * as program from './program.js';
 import {
@@ -1403,7 +1403,7 @@ async function boot() {
   view.innerHTML = '<div class="empty">' + m('loading') + '</div>';
   await content.loadContent();
   render();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js?v=20260713-33').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js?v=20260713-34').catch(() => {});
 }
 
 boot();

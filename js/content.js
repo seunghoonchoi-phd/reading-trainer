@@ -65,11 +65,11 @@ const SEED = {
   },
 };
 
-let DATA = null;
-const koreanTranslationCache = new Map();
+const CONTENT_STATE_KEY = '__readfastContentStateV1';
+const CONTENT_STATE = globalThis[CONTENT_STATE_KEY] ||= { data: null, koreanTranslationCache: new Map() };
 const TRANSLATION_CHUNK_LIMIT = 3600;
 // Bump when registered passage data changes. It bypasses a CDN copy that can outlive a new deploy.
-const CONTENT_REVISION = '20260713-33';
+const CONTENT_REVISION = '20260713-34';
 
 async function tryFetch(path) {
   const url = `${path}${path.includes('?') ? '&' : '?'}v=${CONTENT_REVISION}`;
@@ -78,7 +78,7 @@ async function tryFetch(path) {
 }
 
 export async function loadContent() {
-  if (DATA) return DATA;
+  if (CONTENT_STATE.data) return CONTENT_STATE.data;
   const [passages, vocabEn, vocabZh, segZh, koreanTranslations] = await Promise.all([
     tryFetch('data/passages.json'),
     tryFetch('data/vocab_en.json'),
@@ -86,7 +86,7 @@ export async function loadContent() {
     tryFetch('data/seg_zh.json'),
     tryFetch('data/korean_translations.json'),
   ]);
-  DATA = {
+  CONTENT_STATE.data = {
     passages: Array.isArray(passages) ? passages : [],
     vocabEn: vocabEn || { words: [], pseudowords: [] },
     vocabZh: vocabZh || { items: [], pseudochars: [] },
@@ -94,13 +94,14 @@ export async function loadContent() {
     koreanTranslations: koreanTranslations || {},
     isSeed: false,
   };
-  return DATA;
+  return CONTENT_STATE.data;
 }
-export const data = () => DATA;
+export const data = () => CONTENT_STATE.data;
+const catalog = () => CONTENT_STATE.data?.passages || [];
 
 export function koreanTranslationTextFor(passage) {
   const key = passage?.id;
-  return key ? (DATA?.koreanTranslations?.[key] || null) : null;
+  return key ? (CONTENT_STATE.data?.koreanTranslations?.[key] || null) : null;
 }
 
 function splitForTranslation(text) {
@@ -148,29 +149,29 @@ export async function koreanTranslationFor(passage) {
   const key = passage?.id || `${passage?.lang || 'en'}:${text}`;
   const bundled = koreanTranslationTextFor(passage);
   if (bundled) return bundled;
-  if (koreanTranslationCache.has(key)) return koreanTranslationCache.get(key);
+  if (CONTENT_STATE.koreanTranslationCache.has(key)) return CONTENT_STATE.koreanTranslationCache.get(key);
   const task = (async () => {
     const pieces = splitForTranslation(text);
     const translated = [];
     for (const piece of pieces) translated.push(await translateChunkToKorean(piece, passage?.lang));
     return translated.join('');
   })();
-  koreanTranslationCache.set(key, task);
+  CONTENT_STATE.koreanTranslationCache.set(key, task);
   try {
     return await task;
   } catch (error) {
-    koreanTranslationCache.delete(key);
+    CONTENT_STATE.koreanTranslationCache.delete(key);
     throw error;
   }
 }
 
 /* ---- selection ---- */
 export function passagesFor(lang, tier) {
-  return DATA.passages.filter(p => p.lang === lang && (tier == null || p.tier === tier));
+  return catalog().filter(p => p.lang === lang && (tier == null || p.tier === tier));
 }
 
 export function allTiers(lang) {
-  return [...new Set(DATA.passages.filter(p => p.lang === lang).map(p => p.tier))].sort((a, b) => a - b);
+  return [...new Set(catalog().filter(p => p.lang === lang).map(p => p.tier))].sort((a, b) => a - b);
 }
 // Public app difficulty maps 1:1 to passage tier. Legacy preference is a
 // compatibility fallback only and never counts as proficiency evidence.
@@ -198,11 +199,11 @@ function freshest(pool) {
   return shuffle(fresh)[0];
 }
 export function pickUnseenPassage(lang, { tier = null, difficulty = null, excludeIds = [], domain = null } = {}) {
-  if (!DATA || !['en', 'zh'].includes(lang)) return null;
+  if (!CONTENT_STATE.data || !['en', 'zh'].includes(lang)) return null;
   const requested = normalizeDifficulty(tier) || normalizeDifficulty(difficulty) || store.getDifficulty(lang);
   const eligible = requested ? [requested] : tiersFor(lang);
   const excluded = new Set(excludeIds || []);
-  let pool = DATA.passages.filter(p => (
+  let pool = CONTENT_STATE.data.passages.filter(p => (
     p.lang === lang
     && eligible.includes(p.tier)
     && !excluded.has(p.id)
@@ -221,8 +222,8 @@ export function pickPassage(lang, tier, exclude = []) {
   const requested = normalizeDifficulty(tier);
   const eligible = requested ? [requested] : tiersFor(lang);
   const excluded = new Set(excludeIds);
-  let pool = DATA.passages.filter(p => p.lang === lang && eligible.includes(p.tier) && !excluded.has(p.id));
-  if (!pool.length) pool = DATA.passages.filter(p => p.lang === lang && eligible.includes(p.tier));
+  let pool = catalog().filter(p => p.lang === lang && eligible.includes(p.tier) && !excluded.has(p.id));
+  if (!pool.length) pool = catalog().filter(p => p.lang === lang && eligible.includes(p.tier));
   if (!pool.length) pool = passagesFor(lang);
   return freshest(domainFilter(pool, domain, requested || store.getDifficulty(lang)));
 }

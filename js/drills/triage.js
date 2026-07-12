@@ -1,7 +1,7 @@
 // ===== drills/triage.js — optional three-pass paper-reading tool =====
 import { h, mount, fmtClock } from '../util.js';
-import * as content from '../content.js';
-import { splitParagraphs, splitSentences } from '../content.js';
+import * as content from '../content.js?v=20260713-34';
+import { splitParagraphs, splitSentences } from '../content.js?v=20260713-34';
 import { t } from '../i18n.js';
 import {
   drillHeader, trainingRationale, resultCard, createDrillTimer, drillTimerElement,

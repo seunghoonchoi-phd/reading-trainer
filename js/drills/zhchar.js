@@ -1,6 +1,6 @@
 // ===== drills/zhchar.js — Chinese character recognition and radical support =====
 import { h, mount, shuffle, median } from '../util.js';
-import * as content from '../content.js';
+import * as content from '../content.js?v=20260713-34';
 import * as store from '../store.js';
 import { inBand } from '../levels.js';
 import { t } from '../i18n.js';
