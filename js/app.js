@@ -97,10 +97,10 @@ registerMessages('ko', {
   'app.phase.progress': '{done}/{goal}',
   'app.phase.next_date': '{date}부터 재측정',
   'app.train.title': '훈련',
-  'app.train.lead': '네 단계를 반복하되, 필요한 훈련은 아래 목록에서 언제든 바로 시작할 수 있습니다.',
+  'app.train.lead': '현재 상태를 확인하고, 처음 보는 글에서 다시 확인합니다. 필요한 훈련은 아래 목록에서 언제든 바로 시작할 수 있습니다.',
   'app.train.cycle': '이번 훈련 순환',
   'app.train.library': '전체 훈련 도구',
-  'app.train.library_help': '잠금은 없습니다. 네 단계는 추천 순서이고, 목록은 직접 연습할 때 씁니다.',
+  'app.train.library_help': '잠금은 없습니다. 두 단계는 추천 순서이고, 목록은 직접 연습할 때 씁니다.',
   'app.category.core': '핵심 훈련',
   'app.category.language_support': '언어별 보조',
   'app.category.practice': '연습·실험',
@@ -273,10 +273,10 @@ registerMessages('en', {
   'app.phase.progress': '{done}/{goal}',
   'app.phase.next_date': 'Reassess from {date}',
   'app.train.title': 'Practice',
-  'app.train.lead': 'Repeat the four-step cycle, or open any tool below whenever you need it.',
+  'app.train.lead': 'Check your current level, then confirm it again with an unseen text. You can open any tool below whenever you need it.',
   'app.train.cycle': 'Current training cycle',
   'app.train.library': 'All practice tools',
-  'app.train.library_help': 'Nothing is locked. The four steps are a recommended order; the library is always open.',
+  'app.train.library_help': 'Nothing is locked. The two steps are a recommended order; the library is always open.',
   'app.category.core': 'Core practice',
   'app.category.language_support': 'Language support',
   'app.category.practice': 'Practice and experiments',
@@ -709,7 +709,8 @@ function renderHome() {
 }
 
 function renderCycle(cycle) {
-  return h('div', { class: 'training-cycle' }, ...cycle.stages.map((stage, index) =>
+  const visibleStages = cycle.stages.filter(stage => ['baseline', 'transfer'].includes(stage.id));
+  return h('div', { class: 'training-cycle' }, ...visibleStages.map((stage, index) =>
     h('article', {
       class: 'cycle-step' + (stage.status === 'active' || stage.status === 'scheduled' ? ' is-current' : '') + (stage.status === 'done' ? ' is-done' : ''),
       'data-state': stage.status === 'done' ? 'done' : (stage.status === 'active' || stage.status === 'scheduled' ? 'current' : 'pending'),
