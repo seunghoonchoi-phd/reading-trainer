@@ -1,6 +1,6 @@
 // ===== drills/vocab.js — due-only spaced review plus lexical decision =====
 import { h, mount, shuffle, median } from '../util.js';
-import * as content from '../content.js?v=20260713-35';
+import * as content from '../content.js?v=20260713-36';
 import * as store from '../store.js';
 import { inBand } from '../levels.js';
 import { t } from '../i18n.js';

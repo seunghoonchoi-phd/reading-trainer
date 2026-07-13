@@ -1,6 +1,6 @@
 // ===== drills/zhchunk.js — Chinese meaning-unit reading support =====
 import { h, mount, countUnits, fmtClock } from '../util.js';
-import * as content from '../content.js?v=20260713-35';
+import * as content from '../content.js?v=20260713-36';
 import * as store from '../store.js';
 import { t } from '../i18n.js';
 import {
@@ -27,6 +27,24 @@ export function chineseMeaningChunks(text) {
   }
   flush();
   return chunks;
+}
+
+function normalizedChunkText(text) {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+export function chineseMeaningUnitParagraphs(passage) {
+  const paragraphs = String(passage?.text || '')
+    .split(/\n{2,}/)
+    .map(paragraph => paragraph.trim())
+    .filter(Boolean);
+  const prepared = passage?.meaning_units;
+  const isValid = Array.isArray(prepared)
+    && prepared.length === paragraphs.length
+    && prepared.every((units, index) => Array.isArray(units)
+      && units.length
+      && normalizedChunkText(units.join('')) === normalizedChunkText(paragraphs[index]));
+  return isValid ? prepared : paragraphs.map(chineseMeaningChunks);
 }
 
 export default {
@@ -66,14 +84,21 @@ export default {
       if (!passage) return setup();
       const novelAtStart = markPassageStarted(passage);
       const units = passage.unit_count || countUnits(passage.text, lang);
-      const chunks = chineseMeaningChunks(passage.text);
+      const paragraphUnits = chineseMeaningUnitParagraphs(passage);
+      const chunks = paragraphUnits.flat();
       const scaffold = 1;
       const cssClass = 'phrase phrase--strong';
-      const spans = chunks.map((chunk, index) => h('span', { class: cssClass + (cssClass && index % 2 ? ' phrase--alt' : '') }, chunk));
+      let unitIndex = 0;
+      const paragraphEls = paragraphUnits.map(units => h('p', { class: 'reader__paragraph' },
+        ...units.map(chunk => {
+          const alternate = unitIndex % 2 === 1;
+          unitIndex += 1;
+          return h('span', { class: cssClass + (alternate ? ' phrase--alt' : '') }, chunk);
+        })));
       const timerEl = drillTimerElement();
       const timer = createDrillTimer(ms => { timerEl.textContent = fmtClock(ms); });
       let paused = false;
-      const reader = h('div', { class: 'reader', lang: 'zh-Hans', 'data-lang': 'zh' }, h('div', { class: 'reader-wrap' }, ...spans));
+      const reader = h('div', { class: 'reader', lang: 'zh-Hans', 'data-lang': 'zh' }, h('div', { class: 'reader-wrap' }, ...paragraphEls));
       const pauseButton = h('button', { class: 'btn btn--ghost', onClick: () => {
         if (paused) { paused = false; timer.resume(); reader.style.visibility = ''; pauseButton.textContent = t('drill.shared.pause'); }
         else { paused = true; timer.pause(); reader.style.visibility = 'hidden'; pauseButton.textContent = t('drill.shared.resume'); }

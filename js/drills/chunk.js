@@ -1,6 +1,6 @@
 // ===== drills/chunk.js — English phrase-boundary support =====
 import { h, mount, countUnits, fmtClock } from '../util.js';
-import * as content from '../content.js?v=20260713-35';
+import * as content from '../content.js?v=20260713-36';
 import * as store from '../store.js';
 import { t } from '../i18n.js';
 import {
@@ -39,6 +39,32 @@ export function phraseChunks(text) {
   }
   flush();
   return mergeSingletonChunks(chunks);
+}
+
+function normalizedChunkText(text) {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Registered passages can carry editor-reviewed meaning units for each original
+ * paragraph.  Only use those units when they reproduce the saved paragraph
+ * exactly.  This keeps the reader faithful to the pasted source text while
+ * avoiding a word-count heuristic for passages that have been prepared.
+ */
+export function meaningUnitParagraphs(passage) {
+  const paragraphs = String(passage?.text || '')
+    .split(/\n{2,}/)
+    .map(paragraph => paragraph.trim())
+    .filter(Boolean);
+  const prepared = passage?.meaning_units;
+
+  const isValid = Array.isArray(prepared)
+    && prepared.length === paragraphs.length
+    && prepared.every((units, index) => Array.isArray(units)
+      && units.length
+      && normalizedChunkText(units.join(' ')) === normalizedChunkText(paragraphs[index]));
+
+  return isValid ? prepared : paragraphs.map(phraseChunks);
 }
 
 const SCAFFOLDS = [1, 2, 3];
@@ -80,14 +106,21 @@ export default {
       if (!p) return setup();
       const novelAtStart = markPassageStarted(p);
       const units = p.unit_count || countUnits(p.text, lang);
-      const chunks = phraseChunks(p.text);
+      const paragraphUnits = meaningUnitParagraphs(p);
+      const chunks = paragraphUnits.flat();
       const scaffold = 1;
       const cssClass = 'phrase phrase--strong';
-      const spans = chunks.map((chunk, index) => h('span', { class: cssClass + (cssClass && index % 2 ? ' phrase--alt' : '') }, `${chunk} `));
+      let unitIndex = 0;
+      const paragraphEls = paragraphUnits.map(units => h('p', { class: 'reader__paragraph' },
+        ...units.map(chunk => {
+          const alternate = unitIndex % 2 === 1;
+          unitIndex += 1;
+          return h('span', { class: cssClass + (alternate ? ' phrase--alt' : '') }, `${chunk} `);
+        })));
       const timerEl = drillTimerElement();
       const timer = createDrillTimer(ms => { timerEl.textContent = fmtClock(ms); });
       let paused = false;
-      const reader = h('div', { class: 'reader', lang: 'en', 'data-lang': 'en' }, h('div', { class: 'reader-wrap' }, ...spans));
+      const reader = h('div', { class: 'reader', lang: 'en', 'data-lang': 'en' }, h('div', { class: 'reader-wrap' }, ...paragraphEls));
       const pauseButton = h('button', { class: 'btn btn--ghost', onClick: () => {
         if (paused) { paused = false; timer.resume(); reader.style.visibility = ''; pauseButton.textContent = t('drill.shared.pause'); }
         else { paused = true; timer.pause(); reader.style.visibility = 'hidden'; pauseButton.textContent = t('drill.shared.resume'); }

@@ -1,6 +1,6 @@
 ﻿// ===== drills/shared.js — common drill UI =====
 import { h, mount, letterFor, shuffle, createTimer } from '../util.js';
-import * as content from '../content.js?v=20260713-35';
+import * as content from '../content.js?v=20260713-36';
 import * as store from '../store.js';
 import { t, getUILang } from '../i18n.js';
 import { defaultTier, hardestTier } from '../levels.js';

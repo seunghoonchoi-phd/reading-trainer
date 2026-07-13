@@ -20,7 +20,8 @@ const revision = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.
 const content = await import(`../js/content.js?v=${revision}`);
 const shared = await import('../js/drills/shared.js');
 const { isExactLocateAnswer } = await import('../js/drills/modes.js');
-const { mergeSingletonChunks, phraseChunks } = await import('../js/drills/chunk.js');
+const { mergeSingletonChunks, phraseChunks, meaningUnitParagraphs } = await import('../js/drills/chunk.js');
+const { chineseMeaningUnitParagraphs } = await import('../js/drills/zhchunk.js');
 const { buildSentenceTrials } = await import('../js/drills/sentence.js');
 const { hasMeaningfulText } = await import('../js/drills/triage.js');
 const { validRetrievalText } = await import('../js/drills/retrieval.js');
@@ -56,6 +57,24 @@ check('청크 후처리는 여러 청크가 있을 때 한 단어 조각을 남�
   const chunks = phraseChunks('A swift fox jumps over the fence and lands near the quiet river.');
   assert.ok(chunks.length >= 2);
   assert.ok(chunks.every(chunk => chunk.trim().split(/\s+/).length >= 2));
+});
+
+check('등록 지문의 검수된 의미 단위는 원래 문단과 줄바꿈을 보존한다', () => {
+  const passage = {
+    text: 'With so much to do and such little time, getting ready can be overwhelming.\n\nCheck out our tips!',
+    meaning_units: [
+      ['With so much to do and such little time,', 'getting ready can be overwhelming.'],
+      ['Check out our tips!'],
+    ],
+  };
+  assert.deepEqual(meaningUnitParagraphs(passage), passage.meaning_units);
+  const malformed = { ...passage, meaning_units: [['Different text']] };
+  assert.equal(meaningUnitParagraphs(malformed).length, 2);
+});
+
+check('중국어 지문도 빈 줄마다 문단을 나누어 원문 구조를 보존한다', () => {
+  const passage = { text: '第一段。\n\n第二段。' };
+  assert.deepEqual(chineseMeaningUnitParagraphs(passage), [['第一段。'], ['第二段。']]);
 });
 
 check('문장 검증은 여섯 문항을 원문/변조 3:3으로 만든다', () => {
